@@ -12,6 +12,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.minimallauncher.ui.HomeScreen
+import com.example.minimallauncher.ui.ReasonLogScreen
 import com.example.minimallauncher.ui.SettingsScreen
 import com.example.minimallauncher.ui.theme.MinimalLauncherTheme
 
@@ -30,27 +31,40 @@ class MainActivity : ComponentActivity() {
     }
 }
 
+/** アプリ内の画面。小規模なので Navigation ライブラリは使わず、この enum で切り替える。 */
+private enum class Screen { HOME, SETTINGS, HISTORY }
+
 /**
- * ホーム画面と設定画面の切り替えを管理する。
- * 小規模なので Navigation ライブラリは使わず、表示フラグで切り替える。
+ * ホーム・設定・履歴の3画面の切り替えを管理する。
+ * 小規模なので Navigation ライブラリは使わず、表示状態（enum）で切り替える。
  */
 @Composable
 private fun LauncherApp(
     viewModel: LauncherViewModel = viewModel(),
 ) {
-    var showSettings by remember { mutableStateOf(false) }
+    var screen by remember { mutableStateOf(Screen.HOME) }
 
-    if (showSettings) {
-        // 設定画面では端末の「戻る」でホームへ戻す
-        BackHandler { showSettings = false }
-        SettingsScreen(
+    when (screen) {
+        Screen.HOME -> HomeScreen(
             viewModel = viewModel,
-            onBack = { showSettings = false },
+            onOpenSettings = { screen = Screen.SETTINGS },
         )
-    } else {
-        HomeScreen(
-            viewModel = viewModel,
-            onOpenSettings = { showSettings = true },
-        )
+        Screen.SETTINGS -> {
+            // 設定画面では端末の「戻る」でホームへ戻す
+            BackHandler { screen = Screen.HOME }
+            SettingsScreen(
+                viewModel = viewModel,
+                onBack = { screen = Screen.HOME },
+                onOpenHistory = { screen = Screen.HISTORY },
+            )
+        }
+        Screen.HISTORY -> {
+            // 履歴画面では端末の「戻る」で設定画面へ戻す
+            BackHandler { screen = Screen.SETTINGS }
+            ReasonLogScreen(
+                viewModel = viewModel,
+                onBack = { screen = Screen.SETTINGS },
+            )
+        }
     }
 }

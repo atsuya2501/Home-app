@@ -20,6 +20,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CenterAlignedTopAppBar
@@ -56,6 +57,7 @@ import com.example.minimallauncher.data.AppInfo
 fun SettingsScreen(
     viewModel: LauncherViewModel,
     onBack: () -> Unit,
+    onOpenHistory: () -> Unit,
 ) {
     // 削除確認の対象アプリ。null のときはダイアログ非表示。
     var pendingRemoval by remember { mutableStateOf<AppInfo?>(null) }
@@ -74,6 +76,14 @@ fun SettingsScreen(
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                             contentDescription = "戻る",
+                        )
+                    }
+                },
+                actions = {
+                    IconButton(onClick = onOpenHistory) {
+                        Icon(
+                            imageVector = Icons.Filled.History,
+                            contentDescription = "起動理由の履歴",
                         )
                     }
                 },
@@ -128,6 +138,7 @@ fun SettingsScreen(
                             checked = checked,
                             category = viewModel.categoryOf(app.packageName),
                             inDock = app.packageName in viewModel.dockPackages,
+                            requireReason = app.packageName in viewModel.frictionPackages,
                             onToggle = { wantChecked ->
                                 if (wantChecked) {
                                     // 追加はそのまま即時反映
@@ -141,6 +152,10 @@ fun SettingsScreen(
                             onToggleDock = {
                                 val nowInDock = app.packageName in viewModel.dockPackages
                                 viewModel.setDock(app.packageName, !nowInDock)
+                            },
+                            onToggleFriction = {
+                                val now = app.packageName in viewModel.frictionPackages
+                                viewModel.setFriction(app.packageName, !now)
                             },
                         )
                     }
@@ -194,9 +209,11 @@ private fun AppCheckRow(
     checked: Boolean,
     category: String,
     inDock: Boolean,
+    requireReason: Boolean,
     onToggle: (Boolean) -> Unit,
     onEditCategory: () -> Unit,
     onToggleDock: () -> Unit,
+    onToggleFriction: () -> Unit,
 ) {
     Row(
         modifier = Modifier
@@ -244,6 +261,17 @@ private fun AppCheckRow(
                         },
                         style = MaterialTheme.typography.labelMedium,
                         modifier = Modifier.clickable(onClick = onToggleDock),
+                    )
+                    Spacer(Modifier.width(16.dp))
+                    Text(
+                        text = if (requireReason) "理由が必要 ●" else "理由が必要 ○",
+                        color = if (requireReason) {
+                            MaterialTheme.colorScheme.primary
+                        } else {
+                            MaterialTheme.colorScheme.onBackground.copy(alpha = 0.5f)
+                        },
+                        style = MaterialTheme.typography.labelMedium,
+                        modifier = Modifier.clickable(onClick = onToggleFriction),
                     )
                 }
             } else {

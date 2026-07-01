@@ -93,11 +93,65 @@ class AllowListStore(context: Context) {
             .apply()
     }
 
+    /** 起動理由入力を必須にするアプリのパッケージ名の集合を取得する。 */
+    fun getFriction(): Set<String> {
+        return prefs.getStringSet(KEY_FRICTION, emptySet())?.toSet() ?: emptySet()
+    }
+
+    /** 起動理由入力を必須にするアプリの集合を保存する。 */
+    fun setFriction(packages: Set<String>) {
+        prefs.edit()
+            .putStringSet(KEY_FRICTION, packages)
+            .apply()
+    }
+
+    /** 起動理由ログを取得する（保存されている順のまま返す）。 */
+    fun getReasonLog(): List<ReasonLogEntry> {
+        val raw = prefs.getString(KEY_REASON_LOG, null) ?: return emptyList()
+        return try {
+            val arr = JSONArray(raw)
+            buildList {
+                for (i in 0 until arr.length()) {
+                    val obj = arr.getJSONObject(i)
+                    add(
+                        ReasonLogEntry(
+                            packageName = obj.getString("pkg"),
+                            label = obj.getString("label"),
+                            reason = obj.getString("reason"),
+                            timestamp = obj.getLong("ts"),
+                        )
+                    )
+                }
+            }
+        } catch (e: Exception) {
+            // 壊れたデータが入っていても落とさず空扱いにする
+            emptyList()
+        }
+    }
+
+    /** 起動理由ログを丸ごと保存する。 */
+    fun setReasonLog(entries: List<ReasonLogEntry>) {
+        val arr = JSONArray()
+        for (entry in entries) {
+            val obj = JSONObject()
+            obj.put("pkg", entry.packageName)
+            obj.put("label", entry.label)
+            obj.put("reason", entry.reason)
+            obj.put("ts", entry.timestamp)
+            arr.put(obj)
+        }
+        prefs.edit()
+            .putString(KEY_REASON_LOG, arr.toString())
+            .apply()
+    }
+
     companion object {
         private const val PREFS_NAME = "launcher_prefs"
         private const val KEY_ALLOWED = "allowed_packages"
         private const val KEY_CATEGORIES = "app_categories"
         private const val KEY_DOCK = "dock_packages"
         private const val KEY_ORDER = "home_order"
+        private const val KEY_FRICTION = "friction_packages"
+        private const val KEY_REASON_LOG = "reason_log"
     }
 }

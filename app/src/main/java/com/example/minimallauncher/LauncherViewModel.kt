@@ -10,6 +10,7 @@ import com.example.minimallauncher.data.AllowListStore
 import com.example.minimallauncher.data.AppInfo
 import com.example.minimallauncher.data.AppRepository
 import com.example.minimallauncher.data.HomeItem
+import com.example.minimallauncher.data.ReasonLogEntry
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -45,16 +46,30 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
     var orderedKeys by mutableStateOf<List<String>>(emptyList())
         private set
 
+    /** 起動理由入力を必須にするアプリのパッケージ名。 */
+    var frictionPackages by mutableStateOf<Set<String>>(emptySet())
+        private set
+
+    /** 起動理由ログ（新しい順）。 */
+    var reasonLog by mutableStateOf<List<ReasonLogEntry>>(emptyList())
+        private set
+
+    /** 起動理由ゲートダイアログの表示対象。null のときは非表示。 */
+    var pendingLaunch by mutableStateOf<AppInfo?>(null)
+        private set
+
     /** まだアプリ一覧の読み込みが終わっていないか（初回ロード中の表示用）。 */
     var isLoading by mutableStateOf(true)
         private set
 
     init {
-        // 保存済みの許可リスト・グループ・ドック・並び順は即座に読める
+        // 保存済みの許可リスト・グループ・ドック・並び順・摩擦設定・ログは即座に読める
         allowedPackages = allowListStore.getAllowed()
         categories = allowListStore.getCategories()
         dockPackages = allowListStore.getDock()
         orderedKeys = allowListStore.getOrder()
+        frictionPackages = allowListStore.getFriction()
+        reasonLog = allowListStore.getReasonLog().sortedByDescending { it.timestamp }
         loadApps()
     }
 
@@ -215,7 +230,51 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
         allowListStore.setCategories(updated)
     }
 
-    /** アプリを起動する。 */
+    /** あるアプリの起動理由入力を必須にするか切り替えて、即座に保存する。 */
+    fun setFriction(packageName: String, requireReason: Boolean) {
+        val updated = frictionPackages.toMutableSet().apply {
+            if (requireReason) add(packageName) else remove(packageName)
+        }
+        frictionPackages = updated
+        allowListStore.setFriction(updated)
+    }
+
+    /**
+     * ホームからのアプリ起動窓口。摩擦対象アプリは理由入力ダイアログを挟み、
+     * それ以外は即座に起動する（遅延ゼロ）。
+     */
+    fun requestLaunch(packageName: String) {
+        if (packageName in frictionPackages) {
+            pendingLaunch = allInstalledApps.find { it.packageName == packageName }
+        } else {
+            launchApp(packageName)
+        }
+    }
+
+    /** ゲートダイアログで理由を確定し、ログに残してから実際に起動する。 */
+    fun confirmLaunch(reason: String) {
+        val app = pendingLaunch ?: return
+        val updated = listOf(
+            ReasonLogEntry(
+                packageName = app.packageName,
+                label = app.label,
+                reason = reason.trim(),
+                timestamp = System.currentTimeMillis(),
+            )
+        ) + reasonLog
+        reasonLog = updated
+        allowListStore.setReasonLog(updated)
+
+        launchApp(app.packageName)
+        pendingLaunch = null
+    }
+
+    /** ゲートダイアログをキャンセルする（起動しない）。 */
+    fun cancelLaunch() {
+        pendingLaunch = null
+    }
+
+    /** アプリを起動する。UI からは requestLaunch 経由で呼ぶこと。 */
     fun launchApp(packageName: String) {
         repository.launchApp(packageName)
     }

@@ -144,7 +144,7 @@ fun HomeScreen(
                                             app = homeItem.app,
                                             onClick = {
                                                 if (!editMode) {
-                                                    viewModel.launchApp(homeItem.app.packageName)
+                                                    viewModel.requestLaunch(homeItem.app.packageName)
                                                 }
                                             },
                                         )
@@ -197,7 +197,7 @@ fun HomeScreen(
             if (dockItems.isNotEmpty()) {
                 DockBar(
                     items = dockItems,
-                    onLaunch = { viewModel.launchApp(it) },
+                    onLaunch = { viewModel.requestLaunch(it) },
                     onOpenFolder = { openFolder = it },
                     editMode = editMode,
                     onRemove = { viewModel.removeFromHome(it) },
@@ -213,7 +213,7 @@ fun HomeScreen(
             apps = folder.apps,
             onDismiss = { openFolder = null },
             onLaunch = { packageName ->
-                viewModel.launchApp(packageName)
+                viewModel.requestLaunch(packageName)
                 openFolder = null
             },
             onRename = { renameTarget = folder.name },
@@ -231,6 +231,15 @@ fun HomeScreen(
                 // リネーム後はいったんフォルダを閉じる（見たいときは再タップ）
                 openFolder = null
             },
+        )
+    }
+
+    // 起動理由入力ゲート（摩擦対象アプリをタップしたときだけ表示）
+    viewModel.pendingLaunch?.let { app ->
+        ReasonGateDialog(
+            app = app,
+            onDismiss = { viewModel.cancelLaunch() },
+            onConfirm = { reason -> viewModel.confirmLaunch(reason) },
         )
     }
 }
@@ -471,6 +480,39 @@ private fun EditableItem(
             }
         }
     }
+}
+
+/** 摩擦対象アプリを起動する前に、理由の入力を求めるダイアログ。 */
+@Composable
+private fun ReasonGateDialog(
+    app: AppInfo,
+    onDismiss: () -> Unit,
+    onConfirm: (String) -> Unit,
+) {
+    var reason by remember(app.packageName) { mutableStateOf("") }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("「${app.label}」を開く理由") },
+        text = {
+            OutlinedTextField(
+                value = reason,
+                onValueChange = { reason = it },
+                label = { Text("理由") },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+            )
+        },
+        confirmButton = {
+            TextButton(
+                enabled = reason.isNotBlank(),
+                onClick = { onConfirm(reason) },
+            ) { Text("開く") }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("キャンセル") }
+        },
+    )
 }
 
 /** フォルダ（グループ）名を変更するダイアログ。 */

@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!--
+      アプリ起動時のウィンドウ用テーマ。画面の中身の色は Compose 側で管理するため、
+      ここではアクションバー無し・初期背景色のみ指定するシンプルな構成にしている。
+      OS標準テーマを親にすることで追加ライブラリ無しで成立する。
+    -->
+    <style name="Theme.MinimalLauncher" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowBackground">@color/launcher_background</item>
+        <item name="android:statusBarColor">@color/launcher_background</item>
+        <item name="android:navigationBarColor">@color/launcher_background</item>
+        <item name="android:windowLightStatusBar">false</item>
+    </style>
+</resources>

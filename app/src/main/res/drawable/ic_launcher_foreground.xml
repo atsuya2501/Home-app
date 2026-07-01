@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  アダプティブアイコンの前景。108x108 のうち中央付近が安全領域。
+  グリッド状に4つの角丸四角形を配置したシンプルなランチャー風アイコン。
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- 左上 -->
+    <path android:fillColor="#FFFFFF"
+        android:pathData="M30,30 h18 a4,4 0 0 1 4,4 v18 a4,4 0 0 1 -4,4 h-18 a4,4 0 0 1 -4,-4 v-18 a4,4 0 0 1 4,-4 z" />
+    <!-- 右上 -->
+    <path android:fillColor="#FFFFFF"
+        android:pathData="M60,30 h18 a4,4 0 0 1 4,4 v18 a4,4 0 0 1 -4,4 h-18 a4,4 0 0 1 -4,-4 v-18 a4,4 0 0 1 4,-4 z" />
+    <!-- 左下 -->
+    <path android:fillColor="#FFFFFF"
+        android:pathData="M30,60 h18 a4,4 0 0 1 4,4 v18 a4,4 0 0 1 -4,4 h-18 a4,4 0 0 1 -4,-4 v-18 a4,4 0 0 1 4,-4 z" />
+    <!-- 右下 -->
+    <path android:fillColor="#FFFFFF"
+        android:pathData="M60,60 h18 a4,4 0 0 1 4,4 v18 a4,4 0 0 1 -4,4 h-18 a4,4 0 0 1 -4,-4 v-18 a4,4 0 0 1 4,-4 z" />
+</vector>

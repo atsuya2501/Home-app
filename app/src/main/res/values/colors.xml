@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- ランチャーの背景（落ち着いたダークグレー） -->
+    <color name="launcher_background">#121212</color>
+    <!-- アプリアイコンのアダプティブアイコン背景 -->
+    <color name="ic_launcher_background">#1E1E1E</color>
+</resources>

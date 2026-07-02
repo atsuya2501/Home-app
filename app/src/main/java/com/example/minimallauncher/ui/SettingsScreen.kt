@@ -2,8 +2,11 @@ package com.example.minimallauncher.ui
 
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -12,7 +15,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
@@ -203,6 +205,7 @@ fun SettingsScreen(
  * アプリ1件分の行（アイコン・名前・チェックボックス）。行全体タップでも切り替え可能。
  * 許可済みのアプリには、グループ名のチップ（タップで変更）を表示する。
  */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun AppCheckRow(
     app: AppInfo,
@@ -240,18 +243,19 @@ private fun AppCheckRow(
                 overflow = TextOverflow.Ellipsis,
             )
             if (checked) {
-                // 許可済みのときだけ「グループ変更」と「下段に固定」のチップを出す
-                Row(
+                // 許可済みのときだけ「グループ変更」等のチップを出す。
+                // 幅が足りないときはチップ単位で次の行へ折り返す（文字の縦割れ防止）。
+                FlowRow(
                     modifier = Modifier.padding(top = 4.dp),
-                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(16.dp),
                 ) {
                     Text(
                         text = "グループ: $category  ›",
                         color = MaterialTheme.colorScheme.primary,
                         style = MaterialTheme.typography.labelMedium,
+                        maxLines = 1,
                         modifier = Modifier.clickable(onClick = onEditCategory),
                     )
-                    Spacer(Modifier.width(16.dp))
                     Text(
                         text = if (inDock) "下段に固定 ●" else "下段に固定 ○",
                         color = if (inDock) {
@@ -260,9 +264,9 @@ private fun AppCheckRow(
                             MaterialTheme.colorScheme.onBackground.copy(alpha = 0.5f)
                         },
                         style = MaterialTheme.typography.labelMedium,
+                        maxLines = 1,
                         modifier = Modifier.clickable(onClick = onToggleDock),
                     )
-                    Spacer(Modifier.width(16.dp))
                     Text(
                         text = if (requireReason) "理由が必要 ●" else "理由が必要 ○",
                         color = if (requireReason) {
@@ -271,6 +275,7 @@ private fun AppCheckRow(
                             MaterialTheme.colorScheme.onBackground.copy(alpha = 0.5f)
                         },
                         style = MaterialTheme.typography.labelMedium,
+                        maxLines = 1,
                         modifier = Modifier.clickable(onClick = onToggleFriction),
                     )
                 }

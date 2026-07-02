@@ -1,6 +1,7 @@
 package com.example.minimallauncher
 
 import android.app.Application
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -83,56 +84,61 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
         }
     }
 
+    // 以下の一覧は元の状態（allInstalledApps 等）から導出される。
+    // 再コンポーズのたびに毎回計算し直さないよう derivedStateOf でキャッシュし、
+    // 元の状態が変わったときだけ再計算する（ドラッグ中の毎フレーム再計算を防ぐ）。
+
     /** 許可済みアプリすべて（アプリ名順）。 */
-    val allowedApps: List<AppInfo>
-        get() = allInstalledApps.filter { it.packageName in allowedPackages }
+    val allowedApps: List<AppInfo> by derivedStateOf {
+        allInstalledApps.filter { it.packageName in allowedPackages }
+    }
 
     /** 下段ドックに固定されたアプリ（アプリ名順）。 */
-    val dockApps: List<AppInfo>
-        get() = allowedApps.filter { it.packageName in dockPackages }
+    val dockApps: List<AppInfo> by derivedStateOf {
+        allowedApps.filter { it.packageName in dockPackages }
+    }
 
     /** グリッド（フォルダ含む）に並べる、ドック以外の許可済みアプリ。 */
-    private val gridApps: List<AppInfo>
-        get() = allowedApps.filter { it.packageName !in dockPackages }
+    private val gridApps: List<AppInfo> by derivedStateOf {
+        allowedApps.filter { it.packageName !in dockPackages }
+    }
 
     /**
      * ホーム画面用に、（ドック以外の）許可済みアプリをグループごとにまとめたもの。
      * 並び順は「名前付きグループ（名前順）」→「その他」を最後、の順。
      */
-    val groupedAllowedApps: List<Pair<String, List<AppInfo>>>
-        get() {
-            val groups = gridApps.groupBy { categories[it.packageName] ?: UNCATEGORIZED }
-            val namedInOrder = groups.keys
-                .filter { it != UNCATEGORIZED }
-                .sorted()
-            return buildList {
-                for (name in namedInOrder) {
-                    add(name to groups.getValue(name))
-                }
-                groups[UNCATEGORIZED]?.let { add(UNCATEGORIZED to it) }
+    val groupedAllowedApps: List<Pair<String, List<AppInfo>>> by derivedStateOf {
+        val groups = gridApps.groupBy { categories[it.packageName] ?: UNCATEGORIZED }
+        val namedInOrder = groups.keys
+            .filter { it != UNCATEGORIZED }
+            .sorted()
+        buildList {
+            for (name in namedInOrder) {
+                add(name to groups.getValue(name))
             }
+            groups[UNCATEGORIZED]?.let { add(UNCATEGORIZED to it) }
         }
+    }
 
     /**
      * ホーム画面に並べる項目（フォルダ＋個別アプリ）を、保存済みの並び順で返す。
      * 並び順に無い項目（新しく追加されたアプリ等）は自然順のまま末尾に付く。
      */
-    val homeItems: List<HomeItem>
-        get() {
-            // 自然順：名前付きグループ（フォルダ）→ その他アプリ（個別）
-            val natural = buildList {
-                for ((name, apps) in groupedAllowedApps) {
-                    if (name == UNCATEGORIZED) {
-                        apps.forEach { add(HomeItem.AppItem(it)) }
-                    } else {
-                        add(HomeItem.Folder(name, apps))
-                    }
+    val homeItems: List<HomeItem> by derivedStateOf {
+        // 自然順：名前付きグループ（フォルダ）→ その他アプリ（個別）
+        val natural = buildList {
+            for ((name, apps) in groupedAllowedApps) {
+                if (name == UNCATEGORIZED) {
+                    apps.forEach { add(HomeItem.AppItem(it)) }
+                } else {
+                    add(HomeItem.Folder(name, apps))
                 }
             }
-            // 保存済み並び順を適用（未登録は末尾。sortedBy は安定ソートなので自然順を保つ）
-            val orderIndex = orderedKeys.withIndex().associate { (i, key) -> key to i }
-            return natural.sortedBy { orderIndex[it.key] ?: Int.MAX_VALUE }
         }
+        // 保存済み並び順を適用（未登録は末尾。sortedBy は安定ソートなので自然順を保つ）
+        val orderIndex = orderedKeys.withIndex().associate { (i, key) -> key to i }
+        natural.sortedBy { orderIndex[it.key] ?: Int.MAX_VALUE }
+    }
 
     /** ドラッグでの並べ替え結果を反映して保存する。 */
     fun moveHomeItem(fromIndex: Int, toIndex: Int) {
@@ -147,19 +153,19 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
      * 下段ドックに並べる項目。ドック内のアプリも、名前付きグループはフォルダにまとめる。
      * 並び順は「名前付きグループ（名前順）」→「その他アプリ」。
      */
-    val dockItems: List<HomeItem>
-        get() {
-            val groups = dockApps.groupBy { categories[it.packageName] ?: UNCATEGORIZED }
-            val named = groups.keys.filter { it != UNCATEGORIZED }.sorted()
-            return buildList {
-                for (name in named) add(HomeItem.Folder(name, groups.getValue(name)))
-                groups[UNCATEGORIZED]?.forEach { add(HomeItem.AppItem(it)) }
-            }
+    val dockItems: List<HomeItem> by derivedStateOf {
+        val groups = dockApps.groupBy { categories[it.packageName] ?: UNCATEGORIZED }
+        val named = groups.keys.filter { it != UNCATEGORIZED }.sorted()
+        buildList {
+            for (name in named) add(HomeItem.Folder(name, groups.getValue(name)))
+            groups[UNCATEGORIZED]?.forEach { add(HomeItem.AppItem(it)) }
         }
+    }
 
     /** 既存のグループ名一覧（グループ選択ダイアログの選択肢用）。 */
-    val existingCategories: List<String>
-        get() = categories.values.filter { it != UNCATEGORIZED }.toSortedSet().toList()
+    val existingCategories: List<String> by derivedStateOf {
+        categories.values.filter { it != UNCATEGORIZED }.toSortedSet().toList()
+    }
 
     /** あるアプリの現在のグループ名（未設定なら「その他」）。 */
     fun categoryOf(packageName: String): String =
@@ -254,14 +260,15 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
     /** ゲートダイアログで理由を確定し、ログに残してから実際に起動する。 */
     fun confirmLaunch(reason: String) {
         val app = pendingLaunch ?: return
-        val updated = listOf(
+        // 古いログは切り捨てて、保存・読み込みが際限なく重くならないようにする
+        val updated = (listOf(
             ReasonLogEntry(
                 packageName = app.packageName,
                 label = app.label,
                 reason = reason.trim(),
                 timestamp = System.currentTimeMillis(),
             )
-        ) + reasonLog
+        ) + reasonLog).take(MAX_REASON_LOG_ENTRIES)
         reasonLog = updated
         allowListStore.setReasonLog(updated)
 
@@ -282,5 +289,8 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
     companion object {
         /** グループ未設定のアプリをまとめる既定グループ名。 */
         const val UNCATEGORIZED = "その他"
+
+        /** 起動理由ログの保持件数の上限。 */
+        private const val MAX_REASON_LOG_ENTRIES = 500
     }
 }

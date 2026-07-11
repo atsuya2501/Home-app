@@ -105,6 +105,23 @@ class AllowListStore(context: Context) {
             .apply()
     }
 
+    /**
+     * 起動待機（数秒のクールダウン）を課すアプリのパッケージ名の集合を取得する。
+     * 未保存（null）のときは Instagram だけを初期有効とした既定値を返す。
+     * ユーザーが一度でも setDelay で保存したら、以後はその保存値（空集合含む）に従う。
+     */
+    fun getDelay(): Set<String> {
+        val saved = prefs.getStringSet(KEY_DELAY, null) ?: return setOf("com.instagram.android")
+        return saved.toSet()
+    }
+
+    /** 起動待機を課すアプリの集合を保存する。 */
+    fun setDelay(packages: Set<String>) {
+        prefs.edit()
+            .putStringSet(KEY_DELAY, packages)
+            .apply()
+    }
+
     /** 起動理由ログを取得する（保存されている順のまま返す）。 */
     fun getReasonLog(): List<ReasonLogEntry> {
         val raw = prefs.getString(KEY_REASON_LOG, null) ?: return emptyList()
@@ -182,6 +199,7 @@ class AllowListStore(context: Context) {
         private const val KEY_DOCK = "dock_packages"
         private const val KEY_ORDER = "home_order"
         private const val KEY_FRICTION = "friction_packages"
+        private const val KEY_DELAY = "delay_packages"
         private const val KEY_REASON_LOG = "reason_log"
         private const val KEY_GROUP_ORDER = "group_item_order"
     }

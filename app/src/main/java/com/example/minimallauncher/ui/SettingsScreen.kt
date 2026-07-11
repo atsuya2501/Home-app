@@ -141,6 +141,7 @@ fun SettingsScreen(
                             category = viewModel.categoryOf(app.packageName),
                             inDock = app.packageName in viewModel.dockPackages,
                             requireReason = app.packageName in viewModel.frictionPackages,
+                            delayGate = app.packageName in viewModel.delayPackages,
                             onToggle = { wantChecked ->
                                 if (wantChecked) {
                                     // 追加はそのまま即時反映
@@ -158,6 +159,10 @@ fun SettingsScreen(
                             onToggleFriction = {
                                 val now = app.packageName in viewModel.frictionPackages
                                 viewModel.setFriction(app.packageName, !now)
+                            },
+                            onToggleDelay = {
+                                val now = app.packageName in viewModel.delayPackages
+                                viewModel.setDelayGate(app.packageName, !now)
                             },
                         )
                     }
@@ -213,10 +218,12 @@ private fun AppCheckRow(
     category: String,
     inDock: Boolean,
     requireReason: Boolean,
+    delayGate: Boolean,
     onToggle: (Boolean) -> Unit,
     onEditCategory: () -> Unit,
     onToggleDock: () -> Unit,
     onToggleFriction: () -> Unit,
+    onToggleDelay: () -> Unit,
 ) {
     Row(
         modifier = Modifier
@@ -277,6 +284,17 @@ private fun AppCheckRow(
                         style = MaterialTheme.typography.labelMedium,
                         maxLines = 1,
                         modifier = Modifier.clickable(onClick = onToggleFriction),
+                    )
+                    Text(
+                        text = if (delayGate) "5秒待機 ●" else "5秒待機 ○",
+                        color = if (delayGate) {
+                            MaterialTheme.colorScheme.primary
+                        } else {
+                            MaterialTheme.colorScheme.onBackground.copy(alpha = 0.5f)
+                        },
+                        style = MaterialTheme.typography.labelMedium,
+                        maxLines = 1,
+                        modifier = Modifier.clickable(onClick = onToggleDelay),
                     )
                 }
             } else {

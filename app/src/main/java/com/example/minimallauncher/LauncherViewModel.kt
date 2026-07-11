@@ -55,6 +55,10 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
     var frictionPackages by mutableStateOf<Set<String>>(emptySet())
         private set
 
+    /** 起動待機（数秒のクールダウン）を課すアプリのパッケージ名。 */
+    var delayPackages by mutableStateOf<Set<String>>(emptySet())
+        private set
+
     /** 起動理由ログ（新しい順）。 */
     var reasonLog by mutableStateOf<List<ReasonLogEntry>>(emptyList())
         private set
@@ -68,13 +72,14 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
         private set
 
     init {
-        // 保存済みの許可リスト・グループ・ドック・並び順・摩擦設定・ログは即座に読める
+        // 保存済みの許可リスト・グループ・ドック・並び順・摩擦設定・待機設定・ログは即座に読める
         allowedPackages = allowListStore.getAllowed()
         categories = allowListStore.getCategories()
         dockPackages = allowListStore.getDock()
         orderedKeys = allowListStore.getOrder()
         groupItemOrder = allowListStore.getGroupOrder()
         frictionPackages = allowListStore.getFriction()
+        delayPackages = allowListStore.getDelay()
         reasonLog = allowListStore.getReasonLog().sortedByDescending { it.timestamp }
         loadApps()
     }
@@ -268,21 +273,43 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
         allowListStore.setFriction(updated)
     }
 
+    /** あるアプリに起動待機（数秒のクールダウン）を課すか切り替えて、即座に保存する。 */
+    fun setDelayGate(packageName: String, enabled: Boolean) {
+        val updated = delayPackages.toMutableSet().apply {
+            if (enabled) add(packageName) else remove(packageName)
+        }
+        delayPackages = updated
+        allowListStore.setDelay(updated)
+    }
+
     /**
-     * ホームからのアプリ起動窓口。摩擦対象アプリは理由入力ダイアログを挟み、
-     * それ以外は即座に起動する（遅延ゼロ）。
+     * ホームからのアプリ起動窓口。理由入力または起動待機の対象アプリはゲートダイアログを挟み、
+     * どちらでもないアプリは即座に起動する（遅延ゼロ）。
      */
     fun requestLaunch(packageName: String) {
-        if (packageName in frictionPackages) {
+        if (packageName in frictionPackages || packageName in delayPackages) {
             pendingLaunch = allInstalledApps.find { it.packageName == packageName }
         } else {
             launchApp(packageName)
         }
     }
 
-    /** ゲートダイアログで理由を確定し、ログに残してから実際に起動する。 */
+    /**
+     * ゲートダイアログを確定して実際に起動する。
+     * 理由が必要なアプリ（friction）は理由をログに残し、YouTube は検索経由で開く。
+     * 待機のみ（friction ではない）のアプリは reason が空で渡ってくるので、
+     * 空理由のゴミログを残さないよう、ログには記録せずそのまま起動する。
+     */
     fun confirmLaunch(reason: String) {
         val app = pendingLaunch ?: return
+
+        if (app.packageName !in frictionPackages) {
+            // 待機のみのアプリ：ログを残さず起動する
+            launchApp(app.packageName)
+            pendingLaunch = null
+            return
+        }
+
         val trimmedReason = reason.trim()
         // 古いログは切り捨てて、保存・読み込みが際限なく重くならないようにする
         val updated = (listOf(
@@ -319,6 +346,9 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
     companion object {
         /** グループ未設定のアプリをまとめる既定グループ名。 */
         const val UNCATEGORIZED = "その他"
+
+        /** 起動待機ゲートでカウントダウンする秒数。 */
+        const val LAUNCH_DELAY_SECONDS = 5
 
         /** 起動理由ログの保持件数の上限。 */
         private const val MAX_REASON_LOG_ENTRIES = 500

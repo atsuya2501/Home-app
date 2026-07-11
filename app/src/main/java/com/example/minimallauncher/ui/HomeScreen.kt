@@ -252,10 +252,18 @@ fun HomeScreen(
         )
     }
 
-    // 起動理由入力ゲート（摩擦対象アプリをタップしたときだけ表示）
+    // 起動ゲート（理由入力または起動待機の対象アプリをタップしたときだけ表示）
     viewModel.pendingLaunch?.let { app ->
         ReasonGateDialog(
             app = app,
+            // 理由が必要なアプリ（friction）のときだけ理由入力欄を出す
+            requireReason = app.packageName in viewModel.frictionPackages,
+            // 起動待機（delay）の対象なら規定秒数だけカウントダウンする（対象外は0）
+            delaySeconds = if (app.packageName in viewModel.delayPackages) {
+                LauncherViewModel.LAUNCH_DELAY_SECONDS
+            } else {
+                0
+            },
             onDismiss = { viewModel.cancelLaunch() },
             onConfirm = { reason -> viewModel.confirmLaunch(reason) },
         )
@@ -515,10 +523,20 @@ private fun EditableItem(
     }
 }
 
-/** 摩擦対象アプリを起動する前に、理由の入力を求めるダイアログ。 */
+/**
+ * 起動ゲートのダイアログ。二つの摩擦を扱う。
+ * - requireReason = true : 理由入力欄を出し、理由を書かないと開けない（従来の理由ゲート）
+ * - delaySeconds  > 0    : 表示から delaySeconds 秒はカウントダウンし、その間は開けない（起動待機ゲート）
+ * 両方が有効なアプリは、理由入力とカウントダウンの両方が同時に効く。
+ *
+ * @param requireReason 理由入力を必須にするか
+ * @param delaySeconds  「開く」を押せるようになるまでの待機秒数（0 なら待機なし）
+ */
 @Composable
 private fun ReasonGateDialog(
     app: AppInfo,
+    requireReason: Boolean,
+    delaySeconds: Int,
     onDismiss: () -> Unit,
     onConfirm: (String) -> Unit,
 ) {
@@ -527,21 +545,46 @@ private fun ReasonGateDialog(
     // ダイアログ表示と同時にテキスト入力へフォーカスし、キーボードを自動で開く。
     val focusRequester = remember { FocusRequester() }
 
+    // 起動待機の残り秒数。表示時から1秒ごとに減らし、0になったら「開く」を解禁する。
+    var remainingSeconds by remember(app.packageName) { mutableStateOf(delaySeconds) }
+    if (delaySeconds > 0) {
+        LaunchedEffect(app.packageName) {
+            while (remainingSeconds > 0) {
+                kotlinx.coroutines.delay(1000)
+                remainingSeconds -= 1
+            }
+        }
+    }
+
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("「${app.label}」を開く理由") },
+        title = {
+            Text(
+                if (requireReason) "「${app.label}」を開く理由"
+                else "「${app.label}」を開きますか？"
+            )
+        },
         text = {
             Column {
-                OutlinedTextField(
-                    value = reason,
-                    onValueChange = { reason = it },
-                    label = { Text("理由") },
-                    singleLine = true,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .focusRequester(focusRequester),
-                )
-                LaunchedEffect(Unit) { focusRequester.requestFocus() }
+                if (requireReason) {
+                    OutlinedTextField(
+                        value = reason,
+                        onValueChange = { reason = it },
+                        label = { Text("理由") },
+                        singleLine = true,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .focusRequester(focusRequester),
+                    )
+                    // 入力欄があるときだけ自動フォーカスする（欄が無いときは requestFocus しない）
+                    LaunchedEffect(Unit) { focusRequester.requestFocus() }
+                } else {
+                    Text(
+                        text = "衝動的に開いていませんか？少し待ってから開けます。",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                }
                 if (isYouTube) {
                     Spacer(Modifier.height(8.dp))
                     Text(
@@ -554,9 +597,15 @@ private fun ReasonGateDialog(
         },
         confirmButton = {
             TextButton(
-                enabled = reason.isNotBlank(),
+                // 待機が終わり、かつ（理由不要 または 理由入力済み）のときだけ押せる
+                enabled = remainingSeconds == 0 && (!requireReason || reason.isNotBlank()),
                 onClick = { onConfirm(reason) },
-            ) { Text("開く") }
+            ) {
+                Text(
+                    if (remainingSeconds > 0) "開く（あと $remainingSeconds 秒）"
+                    else "開く"
+                )
+            }
         },
         dismissButton = {
             TextButton(onClick = onDismiss) { Text("キャンセル") }

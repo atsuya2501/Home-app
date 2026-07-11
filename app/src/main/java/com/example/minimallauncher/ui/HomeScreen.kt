@@ -39,6 +39,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -46,6 +47,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
@@ -191,7 +194,7 @@ fun HomeScreen(
                 Icon(
                     imageVector = Icons.Filled.Settings,
                     contentDescription = "設定",
-                    tint = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f),
+                    tint = HomeLabelColor.copy(alpha = 0.7f),
                 )
             }
 
@@ -521,6 +524,8 @@ private fun ReasonGateDialog(
 ) {
     var reason by remember(app.packageName) { mutableStateOf("") }
     val isYouTube = app.packageName == AppRepository.YOUTUBE_PACKAGE
+    // ダイアログ表示と同時にテキスト入力へフォーカスし、キーボードを自動で開く。
+    val focusRequester = remember { FocusRequester() }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -532,8 +537,11 @@ private fun ReasonGateDialog(
                     onValueChange = { reason = it },
                     label = { Text("理由") },
                     singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .focusRequester(focusRequester),
                 )
+                LaunchedEffect(Unit) { focusRequester.requestFocus() }
                 if (isYouTube) {
                     Spacer(Modifier.height(8.dp))
                     Text(
@@ -603,13 +611,13 @@ private fun EmptyHome(
     ) {
         Text(
             text = "表示するアプリがありません",
-            color = MaterialTheme.colorScheme.onBackground,
+            color = HomeLabelColor,
             style = MaterialTheme.typography.titleMedium,
         )
         Spacer(Modifier.height(8.dp))
         Text(
             text = "画面を長押し、または右上の設定ボタンから\n表示するアプリを選んでください",
-            color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f),
+            color = HomeLabelColor.copy(alpha = 0.7f),
             style = MaterialTheme.typography.bodyMedium,
             textAlign = TextAlign.Center,
         )

@@ -1,8 +1,10 @@
 package com.example.minimallauncher.data
 
+import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.net.Uri
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.core.graphics.drawable.toBitmap
 
@@ -57,7 +59,29 @@ class AppRepository(private val context: Context) {
         return true
     }
 
+    /**
+     * YouTube を「ホームフィードではなく検索結果」で直接開く。
+     * トップ画面の Shorts やおすすめ動画を経由させないための入口。
+     * @return 開けた場合 true。YouTube 未インストール等で失敗したら false。
+     */
+    fun launchYouTubeSearch(query: String): Boolean {
+        val uri = Uri.parse("https://www.youtube.com/results?search_query=${Uri.encode(query)}")
+        val intent = Intent(Intent.ACTION_VIEW, uri).apply {
+            setPackage(YOUTUBE_PACKAGE)
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+        return try {
+            context.startActivity(intent)
+            true
+        } catch (e: ActivityNotFoundException) {
+            false
+        }
+    }
+
     companion object {
         private const val ICON_SIZE_PX = 144
+
+        /** YouTube 公式アプリのパッケージ名。 */
+        const val YOUTUBE_PACKAGE = "com.google.android.youtube"
     }
 }

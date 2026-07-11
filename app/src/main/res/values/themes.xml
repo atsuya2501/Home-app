@@ -6,7 +6,10 @@
       OS標準テーマを親にすることで追加ライブラリ無しで成立する。
     -->
     <style name="Theme.MinimalLauncher" parent="android:Theme.Material.NoActionBar">
-        <item name="android:windowBackground">@color/launcher_background</item>
+        <!-- ホームアプリとして端末の壁紙を背後に表示する。中身側（Compose）が
+             透明で描く場所だけ壁紙が透けて見える。 -->
+        <item name="android:windowShowWallpaper">true</item>
+        <item name="android:windowBackground">@android:color/transparent</item>
         <item name="android:statusBarColor">@color/launcher_background</item>
         <item name="android:navigationBarColor">@color/launcher_background</item>
         <item name="android:windowLightStatusBar">false</item>

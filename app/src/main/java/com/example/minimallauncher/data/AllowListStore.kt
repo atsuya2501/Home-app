@@ -145,6 +145,36 @@ class AllowListStore(context: Context) {
             .apply()
     }
 
+    /** グループ内でのアプリの並び順（グループ名 → パッケージ名の配列）を取得する。 */
+    fun getGroupOrder(): Map<String, List<String>> {
+        val raw = prefs.getString(KEY_GROUP_ORDER, null) ?: return emptyMap()
+        return try {
+            val obj = JSONObject(raw)
+            buildMap {
+                for (key in obj.keys()) {
+                    val arr = obj.getJSONArray(key)
+                    put(key, buildList { for (i in 0 until arr.length()) add(arr.getString(i)) })
+                }
+            }
+        } catch (e: Exception) {
+            // 壊れたデータが入っていても落とさず空扱いにする
+            emptyMap()
+        }
+    }
+
+    /** グループ内の並び順を丸ごと保存する。 */
+    fun setGroupOrder(order: Map<String, List<String>>) {
+        val obj = JSONObject()
+        for ((category, packages) in order) {
+            val arr = JSONArray()
+            packages.forEach { arr.put(it) }
+            obj.put(category, arr)
+        }
+        prefs.edit()
+            .putString(KEY_GROUP_ORDER, obj.toString())
+            .apply()
+    }
+
     companion object {
         private const val PREFS_NAME = "launcher_prefs"
         private const val KEY_ALLOWED = "allowed_packages"
@@ -153,5 +183,6 @@ class AllowListStore(context: Context) {
         private const val KEY_ORDER = "home_order"
         private const val KEY_FRICTION = "friction_packages"
         private const val KEY_REASON_LOG = "reason_log"
+        private const val KEY_GROUP_ORDER = "group_item_order"
     }
 }

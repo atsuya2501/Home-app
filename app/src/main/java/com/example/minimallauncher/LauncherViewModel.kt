@@ -47,6 +47,10 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
     var orderedKeys by mutableStateOf<List<String>>(emptyList())
         private set
 
+    /** グループ内でのアプリの並び順（グループ名 → パッケージ名の並び）。 */
+    var groupItemOrder by mutableStateOf<Map<String, List<String>>>(emptyMap())
+        private set
+
     /** 起動理由入力を必須にするアプリのパッケージ名。 */
     var frictionPackages by mutableStateOf<Set<String>>(emptySet())
         private set
@@ -69,6 +73,7 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
         categories = allowListStore.getCategories()
         dockPackages = allowListStore.getDock()
         orderedKeys = allowListStore.getOrder()
+        groupItemOrder = allowListStore.getGroupOrder()
         frictionPackages = allowListStore.getFriction()
         reasonLog = allowListStore.getReasonLog().sortedByDescending { it.timestamp }
         loadApps()
@@ -114,7 +119,7 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
             .sorted()
         buildList {
             for (name in namedInOrder) {
-                add(name to groups.getValue(name))
+                add(name to orderWithinGroup(name, groups.getValue(name)))
             }
             groups[UNCATEGORIZED]?.let { add(UNCATEGORIZED to it) }
         }
@@ -157,7 +162,7 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
         val groups = dockApps.groupBy { categories[it.packageName] ?: UNCATEGORIZED }
         val named = groups.keys.filter { it != UNCATEGORIZED }.sorted()
         buildList {
-            for (name in named) add(HomeItem.Folder(name, groups.getValue(name)))
+            for (name in named) add(HomeItem.Folder(name, orderWithinGroup(name, groups.getValue(name))))
             groups[UNCATEGORIZED]?.forEach { add(HomeItem.AppItem(it)) }
         }
     }
@@ -165,6 +170,24 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
     /** 既存のグループ名一覧（グループ選択ダイアログの選択肢用）。 */
     val existingCategories: List<String> by derivedStateOf {
         categories.values.filter { it != UNCATEGORIZED }.toSortedSet().toList()
+    }
+
+    /** 保存済みのグループ内並び順を適用する（並び順に無いアプリは自然順のまま末尾）。 */
+    private fun orderWithinGroup(category: String, apps: List<AppInfo>): List<AppInfo> {
+        val order = groupItemOrder[category] ?: return apps
+        val index = order.withIndex().associate { (i, pkg) -> pkg to i }
+        return apps.sortedBy { index[it.packageName] ?: Int.MAX_VALUE }
+    }
+
+    /** フォルダ内でのドラッグ並べ替え結果を反映して保存する。 */
+    fun moveGroupItem(category: String, apps: List<AppInfo>, fromIndex: Int, toIndex: Int) {
+        if (fromIndex !in apps.indices || toIndex !in apps.indices) return
+        val keys = apps.map { it.packageName }.toMutableList()
+        keys.add(toIndex, keys.removeAt(fromIndex))
+        val updated = groupItemOrder.toMutableMap()
+        updated[category] = keys
+        groupItemOrder = updated
+        allowListStore.setGroupOrder(updated)
     }
 
     /** あるアプリの現在のグループ名（未設定なら「その他」）。 */
@@ -260,19 +283,26 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
     /** ゲートダイアログで理由を確定し、ログに残してから実際に起動する。 */
     fun confirmLaunch(reason: String) {
         val app = pendingLaunch ?: return
+        val trimmedReason = reason.trim()
         // 古いログは切り捨てて、保存・読み込みが際限なく重くならないようにする
         val updated = (listOf(
             ReasonLogEntry(
                 packageName = app.packageName,
                 label = app.label,
-                reason = reason.trim(),
+                reason = trimmedReason,
                 timestamp = System.currentTimeMillis(),
             )
         ) + reasonLog).take(MAX_REASON_LOG_ENTRIES)
         reasonLog = updated
         allowListStore.setReasonLog(updated)
 
-        launchApp(app.packageName)
+        // YouTube はホームフィード（Shorts の誘惑）を経由させず、
+        // 入力した理由をそのまま検索して結果画面から開始する
+        val openedViaSearch = app.packageName == AppRepository.YOUTUBE_PACKAGE &&
+            repository.launchYouTubeSearch(trimmedReason)
+        if (!openedViaSearch) {
+            launchApp(app.packageName)
+        }
         pendingLaunch = null
     }
 

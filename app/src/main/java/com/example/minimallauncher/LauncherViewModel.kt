@@ -84,13 +84,24 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
         loadApps()
     }
 
-    /** 端末のアプリ一覧を（重い処理なので）バックグラウンドで読み込む。 */
-    fun loadApps() {
+    /** アプリ一覧の再読み込みが実行中か（同時に走らせないためのガード）。 */
+    private var isReloading = false
+
+    /**
+     * 端末のアプリ一覧を（重い処理なので）バックグラウンドで読み込む。
+     *
+     * @param showLoading 初回ロードのようにスピナーを見せたいときは true。
+     *   画面復帰時の静かなリフレッシュでは false にして、設定画面のスピナー点滅を防ぐ。
+     */
+    fun loadApps(showLoading: Boolean = true) {
+        if (isReloading) return
+        isReloading = true
         viewModelScope.launch {
-            isLoading = true
+            if (showLoading) isLoading = true
             val apps = withContext(Dispatchers.IO) { repository.loadInstalledApps() }
             allInstalledApps = apps
             isLoading = false
+            isReloading = false
         }
     }
 

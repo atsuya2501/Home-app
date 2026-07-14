@@ -5,6 +5,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.viewModels
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -20,14 +21,25 @@ import com.example.minimallauncher.ui.theme.MinimalLauncherTheme
  * アプリの入口。ホームアプリとして起動されるとこの画面が表示される。
  */
 class MainActivity : ComponentActivity() {
+    // Activity スコープの ViewModel。Compose 側の viewModel() と同一インスタンスになるので、
+    // onResume からのリフレッシュと画面の表示が同じ状態を共有する。
+    private val viewModel: LauncherViewModel by viewModels()
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         setContent {
             MinimalLauncherTheme {
-                LauncherApp()
+                LauncherApp(viewModel)
             }
         }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        // 他アプリからホームへ戻った時などに、新規インストール/削除を一覧へ反映する。
+        // スピナーは出さず静かに差し替える。
+        viewModel.loadApps(showLoading = false)
     }
 }
 

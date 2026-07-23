@@ -1,6 +1,9 @@
 package com.example.minimallauncher.ui
 
+import android.app.Activity
 import android.app.WallpaperManager
+import android.content.Context
+import android.content.ContextWrapper
 import android.os.Handler
 import android.os.Looper
 import androidx.compose.runtime.Composable
@@ -11,8 +14,11 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
 import androidx.core.graphics.ColorUtils
+import androidx.core.view.WindowCompat
 import com.example.minimallauncher.data.HomeLabelMode
 
 val LocalHomeLabelColor = compositionLocalOf { Color.White }
@@ -50,4 +56,29 @@ fun rememberHomeLabelColor(mode: HomeLabelMode): Color {
         HomeLabelMode.LIGHT -> Color.White
         HomeLabelMode.DARK -> Color(0xFF1C1C1C)
     }
+}
+
+/** ホーム上部の時刻・電波・電池表示を、アプリ名と同じ白黒へ切り替える。 */
+@Composable
+fun ApplyHomeStatusBarStyle(color: Color) {
+    val activity = LocalContext.current.findActivity() ?: return
+    val view = LocalView.current
+    val useDarkIcons = color.luminance() < 0.5f
+
+    DisposableEffect(activity, view, useDarkIcons) {
+        WindowCompat.getInsetsController(activity.window, view)
+            .isAppearanceLightStatusBars = useDarkIcons
+
+        onDispose {
+            // 設定画面は暗い背景なので、ホームを離れたら白い表示へ戻す。
+            WindowCompat.getInsetsController(activity.window, view)
+                .isAppearanceLightStatusBars = false
+        }
+    }
+}
+
+private tailrec fun Context.findActivity(): Activity? = when (this) {
+    is Activity -> this
+    is ContextWrapper -> baseContext.findActivity()
+    else -> null
 }

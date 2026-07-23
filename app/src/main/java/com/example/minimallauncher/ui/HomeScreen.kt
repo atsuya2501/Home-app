@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -42,6 +43,7 @@ fun HomeScreen(
     onOpenSettings: () -> Unit,
 ) {
     val labelColor = rememberHomeLabelColor(viewModel.homeLabelMode)
+    ApplyHomeStatusBarStyle(labelColor)
     var openFolder by remember { mutableStateOf<Pair<String, Boolean>?>(null) }
     var renameTarget by remember { mutableStateOf<String?>(null) }
     var editMode by remember { mutableStateOf(false) }
@@ -49,6 +51,22 @@ fun HomeScreen(
     CompositionLocalProvider(LocalHomeLabelColor provides labelColor) {
         Surface(modifier = Modifier.fillMaxSize(), color = Color.Transparent) {
             Column(modifier = Modifier.fillMaxSize()) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .statusBarsPadding()
+                        .padding(horizontal = 8.dp),
+                    horizontalArrangement = Arrangement.End,
+                ) {
+                    IconButton(onClick = onOpenSettings) {
+                        Icon(
+                            imageVector = Icons.Filled.Settings,
+                            contentDescription = "設定",
+                            tint = LocalHomeLabelColor.current.copy(alpha = 0.75f),
+                        )
+                    }
+                }
+
                 Box(
                     modifier = Modifier
                         .weight(1f)
@@ -74,20 +92,6 @@ fun HomeScreen(
                             onRemove = viewModel::removeFromHome,
                             onOpenFolder = { openFolder = it.name to false },
                             onLaunch = viewModel::requestLaunch,
-                        )
-                    }
-
-                    IconButton(
-                        onClick = onOpenSettings,
-                        modifier = Modifier
-                            .align(Alignment.TopEnd)
-                            .statusBarsPadding()
-                            .padding(8.dp),
-                    ) {
-                        Icon(
-                            imageVector = Icons.Filled.Settings,
-                            contentDescription = "設定",
-                            tint = LocalHomeLabelColor.current.copy(alpha = 0.75f),
                         )
                     }
                 }
@@ -176,7 +180,7 @@ private fun HomeGrid(
         contentPadding = PaddingValues(
             start = 12.dp,
             end = 12.dp,
-            top = 72.dp,
+            top = 16.dp,
             bottom = 48.dp,
         ),
         horizontalArrangement = Arrangement.spacedBy(8.dp),

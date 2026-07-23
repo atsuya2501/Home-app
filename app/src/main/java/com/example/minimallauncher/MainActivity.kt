@@ -13,6 +13,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.minimallauncher.ui.HomeScreen
+import com.example.minimallauncher.ui.MoreSettingsScreen
 import com.example.minimallauncher.ui.ReasonLogScreen
 import com.example.minimallauncher.ui.SettingsScreen
 import com.example.minimallauncher.ui.theme.MinimalLauncherTheme
@@ -44,10 +45,10 @@ class MainActivity : ComponentActivity() {
 }
 
 /** アプリ内の画面。小規模なので Navigation ライブラリは使わず、この enum で切り替える。 */
-private enum class Screen { HOME, SETTINGS, HISTORY }
+private enum class Screen { HOME, APP_SETTINGS, MORE_SETTINGS, HISTORY }
 
 /**
- * ホーム・設定・履歴の3画面の切り替えを管理する。
+ * ホーム・アプリ選択・その他の設定・履歴の切り替えを管理する。
  * 小規模なので Navigation ライブラリは使わず、表示状態（enum）で切り替える。
  */
 @Composable
@@ -59,23 +60,32 @@ private fun LauncherApp(
     when (screen) {
         Screen.HOME -> HomeScreen(
             viewModel = viewModel,
-            onOpenSettings = { screen = Screen.SETTINGS },
+            onOpenSettings = { screen = Screen.APP_SETTINGS },
         )
-        Screen.SETTINGS -> {
-            // 設定画面では端末の「戻る」でホームへ戻す
+        Screen.APP_SETTINGS -> {
+            // アプリ選択画面では端末の「戻る」でホームへ戻す
             BackHandler { screen = Screen.HOME }
             SettingsScreen(
                 viewModel = viewModel,
                 onBack = { screen = Screen.HOME },
+                onOpenMoreSettings = { screen = Screen.MORE_SETTINGS },
+            )
+        }
+        Screen.MORE_SETTINGS -> {
+            // その他の設定画面では端末の「戻る」でアプリ選択へ戻す
+            BackHandler { screen = Screen.APP_SETTINGS }
+            MoreSettingsScreen(
+                viewModel = viewModel,
+                onBack = { screen = Screen.APP_SETTINGS },
                 onOpenHistory = { screen = Screen.HISTORY },
             )
         }
         Screen.HISTORY -> {
-            // 履歴画面では端末の「戻る」で設定画面へ戻す
-            BackHandler { screen = Screen.SETTINGS }
+            // 履歴画面では端末の「戻る」でその他の設定へ戻す
+            BackHandler { screen = Screen.MORE_SETTINGS }
             ReasonLogScreen(
                 viewModel = viewModel,
-                onBack = { screen = Screen.SETTINGS },
+                onBack = { screen = Screen.MORE_SETTINGS },
             )
         }
     }

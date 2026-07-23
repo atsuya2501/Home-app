@@ -22,8 +22,8 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.Checkbox
@@ -59,7 +59,7 @@ import com.example.minimallauncher.data.AppInfo
 fun SettingsScreen(
     viewModel: LauncherViewModel,
     onBack: () -> Unit,
-    onOpenHistory: () -> Unit,
+    onOpenMoreSettings: () -> Unit,
 ) {
     // 削除確認の対象アプリ。null のときはダイアログ非表示。
     var pendingRemoval by remember { mutableStateOf<AppInfo?>(null) }
@@ -82,10 +82,10 @@ fun SettingsScreen(
                     }
                 },
                 actions = {
-                    IconButton(onClick = onOpenHistory) {
+                    IconButton(onClick = onOpenMoreSettings) {
                         Icon(
-                            imageVector = Icons.Filled.History,
-                            contentDescription = "起動理由の履歴",
+                            imageVector = Icons.Filled.Settings,
+                            contentDescription = "その他の設定",
                         )
                     }
                 },
@@ -117,8 +117,6 @@ fun SettingsScreen(
                 },
                 singleLine = true,
             )
-
-            SettingsUtilities(viewModel)
 
             if (viewModel.isLoading) {
                 Box(modifier = Modifier.fillMaxSize()) {

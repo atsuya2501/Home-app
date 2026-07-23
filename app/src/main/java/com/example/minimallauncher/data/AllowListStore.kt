@@ -67,6 +67,28 @@ class AllowListStore(context: Context) {
             .apply()
     }
 
+    /** 下段ドック項目の並び順（HomeItem.key の配列）を取得する。 */
+    fun getDockOrder(): List<String> {
+        val raw = prefs.getString(KEY_DOCK_ORDER, null) ?: return emptyList()
+        return try {
+            val arr = JSONArray(raw)
+            buildList {
+                for (i in 0 until arr.length()) add(arr.getString(i))
+            }
+        } catch (e: Exception) {
+            emptyList()
+        }
+    }
+
+    /** 下段ドック項目の並び順を保存する。 */
+    fun setDockOrder(keys: List<String>) {
+        val arr = JSONArray()
+        keys.forEach { arr.put(it) }
+        prefs.edit()
+            .putString(KEY_DOCK_ORDER, arr.toString())
+            .apply()
+    }
+
     /** ホーム項目の並び順（HomeItem.key の配列）を取得する。 */
     fun getOrder(): List<String> {
         val raw = prefs.getString(KEY_ORDER, null) ?: return emptyList()
@@ -197,6 +219,7 @@ class AllowListStore(context: Context) {
         private const val KEY_ALLOWED = "allowed_packages"
         private const val KEY_CATEGORIES = "app_categories"
         private const val KEY_DOCK = "dock_packages"
+        private const val KEY_DOCK_ORDER = "dock_order"
         private const val KEY_ORDER = "home_order"
         private const val KEY_FRICTION = "friction_packages"
         private const val KEY_DELAY = "delay_packages"

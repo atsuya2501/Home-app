@@ -12,6 +12,7 @@ import com.example.minimallauncher.data.AppInfo
 import com.example.minimallauncher.data.AppRepository
 import com.example.minimallauncher.data.HomeItem
 import com.example.minimallauncher.data.ReasonLogEntry
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -41,6 +42,10 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
 
     /** 下段ドックに固定するアプリのパッケージ名。 */
     var dockPackages by mutableStateOf<Set<String>>(emptySet())
+        private set
+
+    /** 下段ドック項目の並び順（HomeItem.key の並び）。 */
+    var dockOrderedKeys by mutableStateOf<List<String>>(emptyList())
         private set
 
     /** ホーム項目の並び順（HomeItem.key の並び）。ユーザーがドラッグで決める。 */
@@ -76,6 +81,7 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
         allowedPackages = allowListStore.getAllowed()
         categories = allowListStore.getCategories()
         dockPackages = allowListStore.getDock()
+        dockOrderedKeys = allowListStore.getDockOrder()
         orderedKeys = allowListStore.getOrder()
         groupItemOrder = allowListStore.getGroupOrder()
         frictionPackages = allowListStore.getFriction()
@@ -98,10 +104,17 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
         isReloading = true
         viewModelScope.launch {
             if (showLoading) isLoading = true
-            val apps = withContext(Dispatchers.IO) { repository.loadInstalledApps() }
-            allInstalledApps = apps
-            isLoading = false
-            isReloading = false
+            try {
+                val apps = withContext(Dispatchers.IO) { repository.loadInstalledApps() }
+                allInstalledApps = apps
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Exception) {
+                // 一時的なPackageManagerの失敗では既存一覧を残し、次回onResumeで再試行する。
+            } finally {
+                isLoading = false
+                isReloading = false
+            }
         }
     }
 
@@ -172,15 +185,26 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
 
     /**
      * 下段ドックに並べる項目。ドック内のアプリも、名前付きグループはフォルダにまとめる。
-     * 並び順は「名前付きグループ（名前順）」→「その他アプリ」。
+     * 保存済みの並び順にない項目は、自然順のまま末尾に追加する。
      */
     val dockItems: List<HomeItem> by derivedStateOf {
         val groups = dockApps.groupBy { categories[it.packageName] ?: UNCATEGORIZED }
         val named = groups.keys.filter { it != UNCATEGORIZED }.sorted()
-        buildList {
+        val natural = buildList {
             for (name in named) add(HomeItem.Folder(name, orderWithinGroup(name, groups.getValue(name))))
             groups[UNCATEGORIZED]?.forEach { add(HomeItem.AppItem(it)) }
         }
+        val orderIndex = dockOrderedKeys.withIndex().associate { (i, key) -> key to i }
+        natural.sortedBy { orderIndex[it.key] ?: Int.MAX_VALUE }
+    }
+
+    /** 下段ドック内のドラッグ並べ替え結果を反映して保存する。 */
+    fun moveDockItem(fromIndex: Int, toIndex: Int) {
+        val keys = dockItems.map { it.key }.toMutableList()
+        if (fromIndex !in keys.indices || toIndex !in keys.indices) return
+        keys.add(toIndex, keys.removeAt(fromIndex))
+        dockOrderedKeys = keys
+        allowListStore.setDockOrder(keys)
     }
 
     /** 既存のグループ名一覧（グループ選択ダイアログの選択肢用）。 */
@@ -273,7 +297,36 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
         }
         categories = updated
         allowListStore.setCategories(updated)
+
+        // グループ名はフォルダの一意キーにも使うため、保存済みの各並び順も同時に移行する。
+        val oldFolderKey = "folder:$oldName"
+        val newFolderKey = trimmed
+            .takeIf { it.isNotEmpty() && it != UNCATEGORIZED }
+            ?.let { "folder:$it" }
+
+        orderedKeys = migrateFolderKey(orderedKeys, oldFolderKey, newFolderKey)
+        allowListStore.setOrder(orderedKeys)
+        dockOrderedKeys = migrateFolderKey(dockOrderedKeys, oldFolderKey, newFolderKey)
+        allowListStore.setDockOrder(dockOrderedKeys)
+
+        val migratedGroupOrder = groupItemOrder.toMutableMap()
+        val oldOrder = migratedGroupOrder.remove(oldName).orEmpty()
+        if (newFolderKey != null && oldOrder.isNotEmpty()) {
+            migratedGroupOrder[trimmed] =
+                (migratedGroupOrder[trimmed].orEmpty() + oldOrder).distinct()
+        }
+        groupItemOrder = migratedGroupOrder
+        allowListStore.setGroupOrder(migratedGroupOrder)
     }
+
+    /** フォルダ名変更・解散時に古いキーを置換し、重複と不要キーを除く。 */
+    private fun migrateFolderKey(
+        keys: List<String>,
+        oldKey: String,
+        newKey: String?,
+    ): List<String> = keys.mapNotNull { key ->
+        if (key == oldKey) newKey else key
+    }.distinct()
 
     /** あるアプリの起動理由入力を必須にするか切り替えて、即座に保存する。 */
     fun setFriction(packageName: String, requireReason: Boolean) {
@@ -299,7 +352,8 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
      */
     fun requestLaunch(packageName: String) {
         if (packageName in frictionPackages || packageName in delayPackages) {
-            pendingLaunch = allInstalledApps.find { it.packageName == packageName }
+            val app = allInstalledApps.find { it.packageName == packageName }
+            if (app != null) pendingLaunch = app else launchApp(packageName)
         } else {
             launchApp(packageName)
         }
@@ -322,6 +376,7 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
         }
 
         val trimmedReason = reason.trim()
+        if (trimmedReason.isEmpty()) return
         // 古いログは切り捨てて、保存・読み込みが際限なく重くならないようにする
         val updated = (listOf(
             ReasonLogEntry(

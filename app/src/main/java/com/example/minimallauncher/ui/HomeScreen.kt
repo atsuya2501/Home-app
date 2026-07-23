@@ -19,6 +19,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items as lazyItems
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
@@ -41,6 +44,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -62,6 +66,7 @@ import com.example.minimallauncher.data.AppRepository
 import com.example.minimallauncher.data.HomeItem
 import sh.calvin.reorderable.ReorderableItem
 import sh.calvin.reorderable.rememberReorderableLazyGridState
+import sh.calvin.reorderable.rememberReorderableLazyListState
 
 /** ホーム画面のアプリ名・グループ名の文字色。壁紙が透けて見えるため、明るい壁紙でも読めるよう固定の暗色にしている。 */
 private val HomeLabelColor = Color(0xFF1C1C1C)
@@ -207,6 +212,8 @@ fun HomeScreen(
                     items = dockItems,
                     onLaunch = { viewModel.requestLaunch(it) },
                     onOpenFolder = { openFolder = it.name to true },
+                    onReorder = viewModel::moveDockItem,
+                    onDragStarted = { editMode = true },
                     editMode = editMode,
                     onRemove = { viewModel.removeFromHome(it) },
                 )
@@ -454,34 +461,53 @@ private fun DockBar(
     items: List<HomeItem>,
     onLaunch: (String) -> Unit,
     onOpenFolder: (HomeItem.Folder) -> Unit,
+    onReorder: (Int, Int) -> Unit,
+    onDragStarted: () -> Unit,
     editMode: Boolean,
     onRemove: (HomeItem) -> Unit,
 ) {
+    val listState = rememberLazyListState()
+    val reorderState = rememberReorderableLazyListState(listState) { from, to ->
+        onReorder(from.index, to.index)
+    }
+
     Column(modifier = Modifier.fillMaxWidth()) {
         HorizontalDivider(color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.12f))
-        Row(
+        LazyRow(
+            state = listState,
             modifier = Modifier
                 .fillMaxWidth()
                 .navigationBarsPadding()
                 .padding(horizontal = 12.dp, vertical = 8.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
         ) {
-            items.forEach { item ->
-                Box(modifier = Modifier.width(76.dp)) {
-                    EditableItem(
-                        editMode = editMode,
-                        onRemove = { onRemove(item) },
+            lazyItems(items, key = { it.key }) { item ->
+                ReorderableItem(reorderState, key = item.key) { isDragging ->
+                    val scale = if (isDragging) 1.1f else 1f
+                    Box(
+                        modifier = Modifier
+                            .width(76.dp)
+                            .longPressDraggableHandle(onDragStarted = { onDragStarted() })
+                            .graphicsLayer {
+                                scaleX = scale
+                                scaleY = scale
+                            },
                     ) {
-                        when (item) {
-                            is HomeItem.Folder -> FolderTile(
-                                name = item.name,
-                                apps = item.apps,
-                                onClick = { if (!editMode) onOpenFolder(item) },
-                            )
-                            is HomeItem.AppItem -> AppGridItem(
-                                app = item.app,
-                                onClick = { if (!editMode) onLaunch(item.app.packageName) },
-                            )
+                        EditableItem(
+                            editMode = editMode,
+                            onRemove = { onRemove(item) },
+                        ) {
+                            when (item) {
+                                is HomeItem.Folder -> FolderTile(
+                                    name = item.name,
+                                    apps = item.apps,
+                                    onClick = { if (!editMode) onOpenFolder(item) },
+                                )
+                                is HomeItem.AppItem -> AppGridItem(
+                                    app = item.app,
+                                    onClick = { if (!editMode) onLaunch(item.app.packageName) },
+                                )
+                            }
                         }
                     }
                 }
@@ -546,7 +572,7 @@ private fun ReasonGateDialog(
     val focusRequester = remember { FocusRequester() }
 
     // 起動待機の残り秒数。表示時から1秒ごとに減らし、0になったら「開く」を解禁する。
-    var remainingSeconds by remember(app.packageName) { mutableStateOf(delaySeconds) }
+    var remainingSeconds by remember(app.packageName) { mutableIntStateOf(delaySeconds) }
     if (delaySeconds > 0) {
         LaunchedEffect(app.packageName) {
             while (remainingSeconds > 0) {
@@ -585,7 +611,7 @@ private fun ReasonGateDialog(
                         style = MaterialTheme.typography.bodyMedium,
                     )
                 }
-                if (isYouTube) {
+                if (isYouTube && requireReason) {
                     Spacer(Modifier.height(8.dp))
                     Text(
                         text = "入力した理由でYouTube内を検索し、検索結果から開きます（トップのおすすめ・ショートを飛ばします）",

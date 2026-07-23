@@ -61,5 +61,9 @@ dependencies {
     // ホーム画面のドラッグ＆ドロップ並べ替え用（LazyVerticalGrid 対応）
     implementation("sh.calvin.reorderable:reorderable:3.1.0")
 
+    testImplementation("junit:junit:4.13.2")
+    // Android標準のorg.jsonと同じAPIをローカル単体テストでも動かすためのテスト専用実装
+    testImplementation("org.json:json:20240303")
+
     debugImplementation("androidx.compose.ui:ui-tooling")
 }

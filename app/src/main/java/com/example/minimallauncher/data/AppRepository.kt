@@ -7,6 +7,7 @@ import android.content.pm.PackageManager
 import android.net.Uri
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.core.graphics.drawable.toBitmap
+import androidx.core.net.toUri
 
 /**
  * 端末のアプリ情報を扱う窓口。
@@ -65,7 +66,7 @@ class AppRepository(private val context: Context) {
      * @return 開けた場合 true。YouTube 未インストール等で失敗したら false。
      */
     fun launchYouTubeSearch(query: String): Boolean {
-        val uri = Uri.parse("https://www.youtube.com/results?search_query=${Uri.encode(query)}")
+        val uri = "https://www.youtube.com/results?search_query=${Uri.encode(query)}".toUri()
         val intent = Intent(Intent.ACTION_VIEW, uri).apply {
             setPackage(YOUTUBE_PACKAGE)
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)

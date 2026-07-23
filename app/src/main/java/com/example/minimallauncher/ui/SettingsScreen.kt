@@ -118,6 +118,8 @@ fun SettingsScreen(
                 singleLine = true,
             )
 
+            SettingsUtilities(viewModel)
+
             if (viewModel.isLoading) {
                 Box(modifier = Modifier.fillMaxSize()) {
                     CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))

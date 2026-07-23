@@ -7,10 +7,11 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
-import com.example.minimallauncher.data.AllowListStore
 import com.example.minimallauncher.data.AppInfo
 import com.example.minimallauncher.data.AppRepository
+import com.example.minimallauncher.data.HomeLabelMode
 import com.example.minimallauncher.data.HomeItem
+import com.example.minimallauncher.data.LauncherPreferences
 import com.example.minimallauncher.data.ReasonLogEntry
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -29,7 +30,7 @@ import kotlinx.coroutines.withContext
 class LauncherViewModel(application: Application) : AndroidViewModel(application) {
 
     private val repository = AppRepository(application)
-    private val allowListStore = AllowListStore(application)
+    private val preferences = LauncherPreferences(application)
 
     var allInstalledApps by mutableStateOf<List<AppInfo>>(emptyList())
         private set
@@ -72,22 +73,48 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
     var pendingLaunch by mutableStateOf<AppInfo?>(null)
         private set
 
+    /** 壁紙上に表示するアプリ名・フォルダ名の文字色設定。 */
+    var homeLabelMode by mutableStateOf(HomeLabelMode.AUTO)
+        private set
+
     /** まだアプリ一覧の読み込みが終わっていないか（初回ロード中の表示用）。 */
     var isLoading by mutableStateOf(true)
         private set
 
     init {
-        // 保存済みの許可リスト・グループ・ドック・並び順・摩擦設定・待機設定・ログは即座に読める
-        allowedPackages = allowListStore.getAllowed()
-        categories = allowListStore.getCategories()
-        dockPackages = allowListStore.getDock()
-        dockOrderedKeys = allowListStore.getDockOrder()
-        orderedKeys = allowListStore.getOrder()
-        groupItemOrder = allowListStore.getGroupOrder()
-        frictionPackages = allowListStore.getFriction()
-        delayPackages = allowListStore.getDelay()
-        reasonLog = allowListStore.getReasonLog().sortedByDescending { it.timestamp }
+        reloadPreferences()
         loadApps()
+    }
+
+    /** 保存済み設定をComposeの状態へ読み込み、期限切れログを同時に削除する。 */
+    private fun reloadPreferences() {
+        allowedPackages = preferences.getAllowed()
+        categories = preferences.getCategories()
+        dockPackages = preferences.getDock()
+        dockOrderedKeys = preferences.getDockOrder()
+        orderedKeys = preferences.getOrder()
+        groupItemOrder = preferences.getGroupOrder()
+        frictionPackages = preferences.getFriction()
+        delayPackages = preferences.getDelay()
+        homeLabelMode = preferences.getHomeLabelMode()
+
+        reasonLog = preferences.getReasonLog()
+        removeExpiredReasonLogs()
+    }
+
+    /** 30日を過ぎたログを削除する。起動時・履歴表示時・バックアップ時に実行する。 */
+    fun removeExpiredReasonLogs() {
+        val current = reasonLog
+        val pruned = pruneReasonLog(
+            entries = current,
+            nowMillis = System.currentTimeMillis(),
+            retentionMillis = REASON_LOG_RETENTION_MILLIS,
+            maxEntries = MAX_REASON_LOG_ENTRIES,
+        )
+        if (pruned != current) {
+            reasonLog = pruned
+            preferences.setReasonLog(pruned)
+        }
     }
 
     /** アプリ一覧の再読み込みが実行中か（同時に走らせないためのガード）。 */
@@ -176,11 +203,11 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
 
     /** ドラッグでの並べ替え結果を反映して保存する。 */
     fun moveHomeItem(fromIndex: Int, toIndex: Int) {
-        val keys = homeItems.map { it.key }.toMutableList()
-        if (fromIndex !in keys.indices || toIndex !in keys.indices) return
-        keys.add(toIndex, keys.removeAt(fromIndex))
+        val current = homeItems.map { it.key }
+        val keys = current.moved(fromIndex, toIndex)
+        if (keys == current) return
         orderedKeys = keys
-        allowListStore.setOrder(keys)
+        preferences.setOrder(keys)
     }
 
     /**
@@ -200,11 +227,11 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
 
     /** 下段ドック内のドラッグ並べ替え結果を反映して保存する。 */
     fun moveDockItem(fromIndex: Int, toIndex: Int) {
-        val keys = dockItems.map { it.key }.toMutableList()
-        if (fromIndex !in keys.indices || toIndex !in keys.indices) return
-        keys.add(toIndex, keys.removeAt(fromIndex))
+        val current = dockItems.map { it.key }
+        val keys = current.moved(fromIndex, toIndex)
+        if (keys == current) return
         dockOrderedKeys = keys
-        allowListStore.setDockOrder(keys)
+        preferences.setDockOrder(keys)
     }
 
     /** 既存のグループ名一覧（グループ選択ダイアログの選択肢用）。 */
@@ -221,13 +248,13 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
 
     /** フォルダ内でのドラッグ並べ替え結果を反映して保存する。 */
     fun moveGroupItem(category: String, apps: List<AppInfo>, fromIndex: Int, toIndex: Int) {
-        if (fromIndex !in apps.indices || toIndex !in apps.indices) return
-        val keys = apps.map { it.packageName }.toMutableList()
-        keys.add(toIndex, keys.removeAt(fromIndex))
+        val current = apps.map { it.packageName }
+        val keys = current.moved(fromIndex, toIndex)
+        if (keys == current) return
         val updated = groupItemOrder.toMutableMap()
         updated[category] = keys
         groupItemOrder = updated
-        allowListStore.setGroupOrder(updated)
+        preferences.setGroupOrder(updated)
     }
 
     /** あるアプリの現在のグループ名（未設定なら「その他」）。 */
@@ -240,7 +267,7 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
             if (allowed) add(packageName) else remove(packageName)
         }
         allowedPackages = updated
-        allowListStore.setAllowed(updated)
+        preferences.setAllowed(updated)
 
         if (!allowed) {
             setCategory(packageName, UNCATEGORIZED)
@@ -254,7 +281,7 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
             if (inDock) add(packageName) else remove(packageName)
         }
         dockPackages = updated
-        allowListStore.setDock(updated)
+        preferences.setDock(updated)
     }
 
     /** ホーム項目（アプリ/フォルダ）をホームから外す。フォルダは中の全アプリを外す。 */
@@ -276,7 +303,7 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
             }
         }
         categories = updated
-        allowListStore.setCategories(updated)
+        preferences.setCategories(updated)
     }
 
     /**
@@ -296,7 +323,7 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
             }
         }
         categories = updated
-        allowListStore.setCategories(updated)
+        preferences.setCategories(updated)
 
         // グループ名はフォルダの一意キーにも使うため、保存済みの各並び順も同時に移行する。
         val oldFolderKey = "folder:$oldName"
@@ -305,9 +332,9 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
             ?.let { "folder:$it" }
 
         orderedKeys = migrateFolderKey(orderedKeys, oldFolderKey, newFolderKey)
-        allowListStore.setOrder(orderedKeys)
+        preferences.setOrder(orderedKeys)
         dockOrderedKeys = migrateFolderKey(dockOrderedKeys, oldFolderKey, newFolderKey)
-        allowListStore.setDockOrder(dockOrderedKeys)
+        preferences.setDockOrder(dockOrderedKeys)
 
         val migratedGroupOrder = groupItemOrder.toMutableMap()
         val oldOrder = migratedGroupOrder.remove(oldName).orEmpty()
@@ -316,17 +343,8 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
                 (migratedGroupOrder[trimmed].orEmpty() + oldOrder).distinct()
         }
         groupItemOrder = migratedGroupOrder
-        allowListStore.setGroupOrder(migratedGroupOrder)
+        preferences.setGroupOrder(migratedGroupOrder)
     }
-
-    /** フォルダ名変更・解散時に古いキーを置換し、重複と不要キーを除く。 */
-    private fun migrateFolderKey(
-        keys: List<String>,
-        oldKey: String,
-        newKey: String?,
-    ): List<String> = keys.mapNotNull { key ->
-        if (key == oldKey) newKey else key
-    }.distinct()
 
     /** あるアプリの起動理由入力を必須にするか切り替えて、即座に保存する。 */
     fun setFriction(packageName: String, requireReason: Boolean) {
@@ -334,7 +352,7 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
             if (requireReason) add(packageName) else remove(packageName)
         }
         frictionPackages = updated
-        allowListStore.setFriction(updated)
+        preferences.setFriction(updated)
     }
 
     /** あるアプリに起動待機（数秒のクールダウン）を課すか切り替えて、即座に保存する。 */
@@ -343,15 +361,39 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
             if (enabled) add(packageName) else remove(packageName)
         }
         delayPackages = updated
-        allowListStore.setDelay(updated)
+        preferences.setDelay(updated)
     }
+
+    fun updateHomeLabelMode(mode: HomeLabelMode) {
+        homeLabelMode = mode
+        preferences.setHomeLabelMode(mode)
+    }
+
+    fun exportBackup(): String {
+        removeExpiredReasonLogs()
+        return preferences.exportBackup()
+    }
+
+    /** 復元に成功したら全画面状態を即時更新する。 */
+    fun importBackup(raw: String): Boolean {
+        if (!preferences.importBackup(raw)) return false
+        reloadPreferences()
+        return true
+    }
+
+    fun launchGate(packageName: String): LaunchGate = launchGateFor(
+        packageName = packageName,
+        frictionPackages = frictionPackages,
+        delayPackages = delayPackages,
+        delaySeconds = LAUNCH_DELAY_SECONDS,
+    )
 
     /**
      * ホームからのアプリ起動窓口。理由入力または起動待機の対象アプリはゲートダイアログを挟み、
      * どちらでもないアプリは即座に起動する（遅延ゼロ）。
      */
     fun requestLaunch(packageName: String) {
-        if (packageName in frictionPackages || packageName in delayPackages) {
+        if (launchGate(packageName).isRequired) {
             val app = allInstalledApps.find { it.packageName == packageName }
             if (app != null) pendingLaunch = app else launchApp(packageName)
         } else {
@@ -378,16 +420,22 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
         val trimmedReason = reason.trim()
         if (trimmedReason.isEmpty()) return
         // 古いログは切り捨てて、保存・読み込みが際限なく重くならないようにする
-        val updated = (listOf(
-            ReasonLogEntry(
-                packageName = app.packageName,
-                label = app.label,
-                reason = trimmedReason,
-                timestamp = System.currentTimeMillis(),
-            )
-        ) + reasonLog).take(MAX_REASON_LOG_ENTRIES)
+        val now = System.currentTimeMillis()
+        val updated = pruneReasonLog(
+            entries = listOf(
+                ReasonLogEntry(
+                    packageName = app.packageName,
+                    label = app.label,
+                    reason = trimmedReason,
+                    timestamp = now,
+                )
+            ) + reasonLog,
+            nowMillis = now,
+            retentionMillis = REASON_LOG_RETENTION_MILLIS,
+            maxEntries = MAX_REASON_LOG_ENTRIES,
+        )
         reasonLog = updated
-        allowListStore.setReasonLog(updated)
+        preferences.setReasonLog(updated)
 
         // YouTube はホームフィード（Shorts の誘惑）を経由させず、
         // 入力した理由をそのまま検索して結果画面から開始する
@@ -404,8 +452,8 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
         pendingLaunch = null
     }
 
-    /** アプリを起動する。UI からは requestLaunch 経由で呼ぶこと。 */
-    fun launchApp(packageName: String) {
+    /** ゲート判定後にだけ呼ぶ、実際のアプリ起動処理。 */
+    private fun launchApp(packageName: String) {
         repository.launchApp(packageName)
     }
 
@@ -418,5 +466,10 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
 
         /** 起動理由ログの保持件数の上限。 */
         private const val MAX_REASON_LOG_ENTRIES = 500
+
+        /** 起動理由ログは30日を過ぎたら削除する。 */
+        const val REASON_LOG_RETENTION_DAYS = 30
+        private const val REASON_LOG_RETENTION_MILLIS =
+            REASON_LOG_RETENTION_DAYS * 24L * 60L * 60L * 1000L
     }
 }

@@ -78,21 +78,24 @@ fun HomeScreen(
                             )
                         },
                 ) {
-                    if (viewModel.allowedApps.isEmpty()) {
-                        EmptyHome(
-                            modifier = Modifier.align(Alignment.Center),
-                            onOpenSettings = onOpenSettings,
-                        )
-                    } else {
-                        HomeGrid(
-                            items = viewModel.homeItems,
-                            editMode = editMode,
-                            onDragStarted = { editMode = true },
-                            onReorder = viewModel::moveHomeItem,
-                            onRemove = viewModel::removeFromHome,
-                            onOpenFolder = { openFolder = it.name to false },
-                            onLaunch = viewModel::requestLaunch,
-                        )
+                    when {
+                        viewModel.allowedApps.isNotEmpty() -> {
+                            HomeGrid(
+                                items = viewModel.homeItems,
+                                editMode = editMode,
+                                onDragStarted = { editMode = true },
+                                onReorder = viewModel::moveHomeItem,
+                                onRemove = viewModel::removeFromHome,
+                                onOpenFolder = { openFolder = it.name to false },
+                                onLaunch = viewModel::requestLaunch,
+                            )
+                        }
+                        !viewModel.isLoading -> {
+                            EmptyHome(
+                                modifier = Modifier.align(Alignment.Center),
+                                onOpenSettings = onOpenSettings,
+                            )
+                        }
                     }
                 }
 

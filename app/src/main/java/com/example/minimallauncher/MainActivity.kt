@@ -2,6 +2,7 @@ package com.example.minimallauncher
 
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.OnBackPressedCallback
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -29,6 +30,16 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+
+        // ランチャーのホームでは連続した戻る操作も常に受け止め、Activityを終了させない。
+        // 設定画面では後から登録されるComposeのBackHandlerが優先される。
+        onBackPressedDispatcher.addCallback(
+            this,
+            object : OnBackPressedCallback(true) {
+                override fun handleOnBackPressed() = Unit
+            },
+        )
+
         setContent {
             MinimalLauncherTheme {
                 LauncherApp(viewModel)
@@ -58,10 +69,12 @@ private fun LauncherApp(
     var screen by remember { mutableStateOf(Screen.HOME) }
 
     when (screen) {
-        Screen.HOME -> HomeScreen(
-            viewModel = viewModel,
-            onOpenSettings = { screen = Screen.APP_SETTINGS },
-        )
+        Screen.HOME -> {
+            HomeScreen(
+                viewModel = viewModel,
+                onOpenSettings = { screen = Screen.APP_SETTINGS },
+            )
+        }
         Screen.APP_SETTINGS -> {
             // アプリ選択画面では端末の「戻る」でホームへ戻す
             BackHandler { screen = Screen.HOME }

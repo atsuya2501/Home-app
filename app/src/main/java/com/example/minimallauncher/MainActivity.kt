@@ -1,6 +1,10 @@
 package com.example.minimallauncher
 
+import android.app.Activity
+import android.appwidget.AppWidgetManager
+import android.content.Intent
 import android.os.Bundle
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.ComponentActivity
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.compose.BackHandler
@@ -18,6 +22,7 @@ import com.example.minimallauncher.ui.MoreSettingsScreen
 import com.example.minimallauncher.ui.ReasonLogScreen
 import com.example.minimallauncher.ui.SettingsScreen
 import com.example.minimallauncher.ui.theme.MinimalLauncherTheme
+import com.example.minimallauncher.widget.LauncherWidgetHost
 
 /**
  * アプリの入口。ホームアプリとして起動されるとこの画面が表示される。
@@ -26,9 +31,30 @@ class MainActivity : ComponentActivity() {
     // Activity スコープの ViewModel。Compose 側の viewModel() と同一インスタンスになるので、
     // onResume からのリフレッシュと画面の表示が同じ状態を共有する。
     private val viewModel: LauncherViewModel by viewModels()
+    private lateinit var widgetHost: LauncherWidgetHost
+    private var pendingWidgetId = AppWidgetManager.INVALID_APPWIDGET_ID
+
+    private val widgetPicker = registerForActivityResult(
+        ActivityResultContracts.StartActivityForResult(),
+    ) { result ->
+        val returnedId = result.data?.getIntExtra(
+            AppWidgetManager.EXTRA_APPWIDGET_ID,
+            pendingWidgetId,
+        ) ?: pendingWidgetId
+        if (result.resultCode == Activity.RESULT_OK && returnedId != AppWidgetManager.INVALID_APPWIDGET_ID) {
+            widgetHost.accept(returnedId)
+            if (pendingWidgetId != returnedId) widgetHost.reject(pendingWidgetId)
+        } else {
+            widgetHost.reject(pendingWidgetId)
+        }
+        pendingWidgetId = AppWidgetManager.INVALID_APPWIDGET_ID
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        widgetHost = LauncherWidgetHost(this)
+        pendingWidgetId = savedInstanceState?.getInt(KEY_PENDING_WIDGET_ID, AppWidgetManager.INVALID_APPWIDGET_ID)
+            ?: AppWidgetManager.INVALID_APPWIDGET_ID
         enableEdgeToEdge()
 
         // ランチャーのホームでは連続した戻る操作も常に受け止め、Activityを終了させない。
@@ -42,7 +68,11 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             MinimalLauncherTheme {
-                LauncherApp(viewModel)
+                LauncherApp(
+                    viewModel = viewModel,
+                    widgetHost = widgetHost,
+                    onPickWidget = ::pickWidget,
+                )
             }
         }
     }
@@ -52,6 +82,37 @@ class MainActivity : ComponentActivity() {
         // 他アプリからホームへ戻った時などに、新規インストール/削除を一覧へ反映する。
         // スピナーは出さず静かに差し替える。
         viewModel.loadApps(showLoading = false)
+    }
+
+    override fun onStart() {
+        super.onStart()
+        widgetHost.host.startListening()
+    }
+
+    override fun onStop() {
+        widgetHost.host.stopListening()
+        super.onStop()
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        outState.putInt(KEY_PENDING_WIDGET_ID, pendingWidgetId)
+        super.onSaveInstanceState(outState)
+    }
+
+    private fun pickWidget() {
+        if (pendingWidgetId != AppWidgetManager.INVALID_APPWIDGET_ID) return
+        pendingWidgetId = widgetHost.allocateId()
+        val intent = Intent(AppWidgetManager.ACTION_APPWIDGET_PICK).apply {
+            putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, pendingWidgetId)
+        }
+        runCatching { widgetPicker.launch(intent) }.onFailure {
+            widgetHost.reject(pendingWidgetId)
+            pendingWidgetId = AppWidgetManager.INVALID_APPWIDGET_ID
+        }
+    }
+
+    companion object {
+        private const val KEY_PENDING_WIDGET_ID = "pending_widget_id"
     }
 }
 
@@ -65,6 +126,8 @@ private enum class Screen { HOME, APP_SETTINGS, MORE_SETTINGS, HISTORY }
 @Composable
 private fun LauncherApp(
     viewModel: LauncherViewModel = viewModel(),
+    widgetHost: LauncherWidgetHost,
+    onPickWidget: () -> Unit,
 ) {
     var screen by remember { mutableStateOf(Screen.HOME) }
 
@@ -73,6 +136,8 @@ private fun LauncherApp(
             HomeScreen(
                 viewModel = viewModel,
                 onOpenSettings = { screen = Screen.APP_SETTINGS },
+                widgetHost = widgetHost,
+                onPickWidget = onPickWidget,
             )
         }
         Screen.APP_SETTINGS -> {

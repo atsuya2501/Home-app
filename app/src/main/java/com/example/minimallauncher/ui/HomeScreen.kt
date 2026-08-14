@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.lazy.grid.GridCells
@@ -16,12 +17,18 @@ import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Widgets
+import androidx.compose.material.icons.filled.DeleteOutline
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -30,9 +37,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.unit.dp
 import com.example.minimallauncher.LauncherViewModel
 import com.example.minimallauncher.data.HomeItem
+import com.example.minimallauncher.widget.LauncherWidgetHost
 import sh.calvin.reorderable.ReorderableItem
 import sh.calvin.reorderable.rememberReorderableLazyGridState
 
@@ -41,12 +50,15 @@ import sh.calvin.reorderable.rememberReorderableLazyGridState
 fun HomeScreen(
     viewModel: LauncherViewModel,
     onOpenSettings: () -> Unit,
+    widgetHost: LauncherWidgetHost,
+    onPickWidget: () -> Unit,
 ) {
     val labelColor = rememberHomeLabelColor(viewModel.homeLabelMode)
     ApplyHomeStatusBarStyle(labelColor)
     var openFolder by remember { mutableStateOf<Pair<String, Boolean>?>(null) }
     var renameTarget by remember { mutableStateOf<String?>(null) }
     var editMode by remember { mutableStateOf(false) }
+    var confirmWidgetRemoval by remember { mutableStateOf(false) }
 
     CompositionLocalProvider(LocalHomeLabelColor provides labelColor) {
         Surface(modifier = Modifier.fillMaxSize(), color = Color.Transparent) {
@@ -58,6 +70,22 @@ fun HomeScreen(
                         .padding(horizontal = 8.dp),
                     horizontalArrangement = Arrangement.End,
                 ) {
+                    if (widgetHost.appWidgetId != LauncherWidgetHost.NO_WIDGET) {
+                        IconButton(onClick = { confirmWidgetRemoval = true }) {
+                            Icon(
+                                imageVector = Icons.Filled.DeleteOutline,
+                                contentDescription = "ウィジェットを削除",
+                                tint = LocalHomeLabelColor.current.copy(alpha = 0.75f),
+                            )
+                        }
+                    }
+                    IconButton(onClick = onPickWidget) {
+                        Icon(
+                            imageVector = Icons.Filled.Widgets,
+                            contentDescription = "ウィジェットを選択",
+                            tint = LocalHomeLabelColor.current.copy(alpha = 0.75f),
+                        )
+                    }
                     IconButton(onClick = onOpenSettings) {
                         Icon(
                             imageVector = Icons.Filled.Settings,
@@ -82,6 +110,11 @@ fun HomeScreen(
                         viewModel.allowedApps.isNotEmpty() -> {
                             HomeGrid(
                                 items = viewModel.homeItems,
+                                modifier = Modifier.padding(
+                                    top = if (
+                                    widgetHost.appWidgetId != LauncherWidgetHost.NO_WIDGET
+                                    ) 116.dp else 0.dp,
+                                ),
                                 editMode = editMode,
                                 onDragStarted = { editMode = true },
                                 onReorder = viewModel::moveHomeItem,
@@ -94,6 +127,30 @@ fun HomeScreen(
                             EmptyHome(
                                 modifier = Modifier.align(Alignment.Center),
                                 onOpenSettings = onOpenSettings,
+                            )
+                        }
+                    }
+
+                    val hostedWidgetId = widgetHost.appWidgetId
+                    if (hostedWidgetId != LauncherWidgetHost.NO_WIDGET) {
+                        key(hostedWidgetId) {
+                            AndroidView(
+                                factory = { context ->
+                                    widgetHost.createView(context)
+                                        ?: android.widget.TextView(context).apply {
+                                            text = "ウィジェットを読み込めません"
+                                        }
+                                },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(108.dp)
+                                    .padding(horizontal = 8.dp),
+                                update = { view ->
+                                    if (view is android.appwidget.AppWidgetHostView) {
+                                        val info = widgetHost.manager.getAppWidgetInfo(hostedWidgetId)
+                                        if (info != null) view.setAppWidget(hostedWidgetId, info)
+                                    }
+                                },
                             )
                         }
                     }
@@ -158,12 +215,30 @@ fun HomeScreen(
                 onConfirm = viewModel::confirmLaunch,
             )
         }
+
+        if (confirmWidgetRemoval) {
+            AlertDialog(
+                onDismissRequest = { confirmWidgetRemoval = false },
+                title = { Text("ウィジェットを削除しますか？") },
+                text = { Text("ホーム画面から取り外します。コンディションアプリの記録は削除されません。") },
+                confirmButton = {
+                    TextButton(onClick = {
+                        widgetHost.removeCurrent()
+                        confirmWidgetRemoval = false
+                    }) { Text("削除") }
+                },
+                dismissButton = {
+                    TextButton(onClick = { confirmWidgetRemoval = false }) { Text("キャンセル") }
+                },
+            )
+        }
     }
 }
 
 @Composable
 private fun HomeGrid(
     items: List<HomeItem>,
+    modifier: Modifier = Modifier,
     editMode: Boolean,
     onDragStarted: () -> Unit,
     onReorder: (Int, Int) -> Unit,
@@ -179,7 +254,7 @@ private fun HomeGrid(
     LazyVerticalGrid(
         columns = GridCells.Fixed(4),
         state = gridState,
-        modifier = Modifier.fillMaxSize(),
+        modifier = modifier.fillMaxSize(),
         contentPadding = PaddingValues(
             start = 12.dp,
             end = 12.dp,

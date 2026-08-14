@@ -106,6 +106,8 @@ fun HomeScreen(
                 HorizontalPager(
                     state = pagerState,
                     modifier = Modifier.weight(1f).fillMaxWidth(),
+                    // AndroidViewを含む重いウィジェットページを、スワイプ前に組み立てておく。
+                    beyondViewportPageCount = 1,
                 ) { page ->
                     if (page == 0) {
                         Box(
@@ -275,13 +277,9 @@ private fun WidgetPage(
                                     else info.minHeight.coerceIn(96, 320).dp
                                 } ?: 120.dp,
                             ),
-                        update = { view ->
-                            if (view is android.appwidget.AppWidgetHostView) {
-                                widgetHost.manager.getAppWidgetInfo(widgetId)?.let {
-                                    view.setAppWidget(widgetId, it)
-                                }
-                            }
-                        },
+                        // createView()で設定済み。再構成のたびにsetAppWidget()すると
+                        // RemoteViewsの再展開が走り、横スワイプが大きくカクつく。
+                        update = {},
                     )
                 }
             }

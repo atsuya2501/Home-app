@@ -270,8 +270,10 @@ private fun WidgetPage(
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(
-                                (widgetHost.manager.getAppWidgetInfo(widgetId)?.minHeight ?: 120)
-                                    .coerceIn(96, 320).dp,
+                                widgetHost.manager.getAppWidgetInfo(widgetId)?.let { info ->
+                                    if (info.provider.packageName == "com.example.conditionapp") 112.dp
+                                    else info.minHeight.coerceIn(96, 320).dp
+                                } ?: 120.dp,
                             ),
                         update = { view ->
                             if (view is android.appwidget.AppWidgetHostView) {

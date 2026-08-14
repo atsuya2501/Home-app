@@ -5,7 +5,7 @@ import android.appwidget.AppWidgetHostView
 import android.appwidget.AppWidgetManager
 import android.content.Context
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 
 class LauncherWidgetHost(context: Context) {
@@ -15,31 +15,22 @@ class LauncherWidgetHost(context: Context) {
     val host = AppWidgetHost(appContext, HOST_ID)
     val manager: AppWidgetManager = AppWidgetManager.getInstance(appContext)
 
-    var appWidgetId by mutableIntStateOf(preferences.getInt(KEY_WIDGET_ID, NO_WIDGET))
-        private set
-
-    var positionX by mutableIntStateOf(preferences.getInt(KEY_POSITION_X, 24))
-        private set
-
-    var positionY by mutableIntStateOf(preferences.getInt(KEY_POSITION_Y, 24))
+    var appWidgetIds by mutableStateOf(loadWidgetIds())
         private set
 
     init {
-        if (appWidgetId != NO_WIDGET && manager.getAppWidgetInfo(appWidgetId) == null) {
-            removeCurrent()
-        }
+        val validIds = appWidgetIds.filter { manager.getAppWidgetInfo(it) != null }
+        appWidgetIds = validIds
+        // 旧版の単一ID・座標形式も、初回起動時に複数ID形式へ移行する。
+        persistIds()
     }
 
     fun allocateId(): Int = host.allocateAppWidgetId()
 
     fun accept(newId: Int) {
         if (newId == AppWidgetManager.INVALID_APPWIDGET_ID) return
-        val oldId = appWidgetId
-        appWidgetId = newId
-        preferences.edit().putInt(KEY_WIDGET_ID, newId).apply()
-        if (oldId != NO_WIDGET && oldId != newId) {
-            runCatching { host.deleteAppWidgetId(oldId) }
-        }
+        if (newId !in appWidgetIds) appWidgetIds = appWidgetIds + newId
+        persistIds()
     }
 
     fun reject(allocatedId: Int) {
@@ -48,30 +39,47 @@ class LauncherWidgetHost(context: Context) {
         }
     }
 
-    fun removeCurrent() {
-        val oldId = appWidgetId
-        appWidgetId = NO_WIDGET
-        preferences.edit().remove(KEY_WIDGET_ID).apply()
-        if (oldId != NO_WIDGET) runCatching { host.deleteAppWidgetId(oldId) }
+    fun remove(widgetId: Int) {
+        if (widgetId !in appWidgetIds) return
+        appWidgetIds = appWidgetIds - widgetId
+        persistIds()
+        runCatching { host.deleteAppWidgetId(widgetId) }
     }
 
-    fun updatePosition(x: Int, y: Int) {
-        positionX = x.coerceAtLeast(0)
-        positionY = y.coerceAtLeast(0)
+    fun move(widgetId: Int, offset: Int) {
+        val from = appWidgetIds.indexOf(widgetId)
+        if (from == -1) return
+        val to = (from + offset).coerceIn(appWidgetIds.indices)
+        if (from == to) return
+        appWidgetIds = appWidgetIds.toMutableList().apply {
+            add(to, removeAt(from))
+        }
+        persistIds()
     }
 
-    fun persistPosition() {
+    fun createView(context: Context, widgetId: Int): AppWidgetHostView? {
+        val info = manager.getAppWidgetInfo(widgetId) ?: return null
+        return host.createView(context, widgetId, info).also { it.setAppWidget(widgetId, info) }
+    }
+
+    private fun loadWidgetIds(): List<Int> {
+        val stored = preferences.getString(KEY_WIDGET_IDS, null)
+            ?.split(',')
+            ?.mapNotNull(String::toIntOrNull)
+            ?.distinct()
+            .orEmpty()
+        if (stored.isNotEmpty()) return stored
+        val legacyId = preferences.getInt(KEY_WIDGET_ID, NO_WIDGET)
+        return if (legacyId == NO_WIDGET) emptyList() else listOf(legacyId)
+    }
+
+    private fun persistIds() {
         preferences.edit()
-            .putInt(KEY_POSITION_X, positionX)
-            .putInt(KEY_POSITION_Y, positionY)
+            .putString(KEY_WIDGET_IDS, appWidgetIds.joinToString(","))
+            .remove(KEY_WIDGET_ID)
+            .remove(KEY_POSITION_X)
+            .remove(KEY_POSITION_Y)
             .apply()
-    }
-
-    fun createView(context: Context): AppWidgetHostView? {
-        val id = appWidgetId
-        if (id == NO_WIDGET) return null
-        val info = manager.getAppWidgetInfo(id) ?: return null
-        return host.createView(context, id, info).also { it.setAppWidget(id, info) }
     }
 
     companion object {
@@ -79,6 +87,7 @@ class LauncherWidgetHost(context: Context) {
         private const val HOST_ID = 240730
         private const val PREFS_NAME = "launcher_widget_host"
         private const val KEY_WIDGET_ID = "home_widget_id"
+        private const val KEY_WIDGET_IDS = "home_widget_ids"
         private const val KEY_POSITION_X = "home_widget_x"
         private const val KEY_POSITION_Y = "home_widget_y"
     }

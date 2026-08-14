@@ -9,8 +9,11 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
@@ -19,6 +22,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Widgets
 import androidx.compose.material.icons.filled.DeleteOutline
+import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -32,6 +37,8 @@ import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -58,7 +65,8 @@ fun HomeScreen(
     var openFolder by remember { mutableStateOf<Pair<String, Boolean>?>(null) }
     var renameTarget by remember { mutableStateOf<String?>(null) }
     var editMode by remember { mutableStateOf(false) }
-    var confirmWidgetRemoval by remember { mutableStateOf(false) }
+    var widgetRemovalTarget by remember { mutableStateOf<Int?>(null) }
+    val pagerState = rememberPagerState(pageCount = { 2 })
 
     CompositionLocalProvider(LocalHomeLabelColor provides labelColor) {
         Surface(modifier = Modifier.fillMaxSize(), color = Color.Transparent) {
@@ -68,91 +76,70 @@ fun HomeScreen(
                         .fillMaxWidth()
                         .statusBarsPadding()
                         .padding(horizontal = 8.dp),
-                    horizontalArrangement = Arrangement.End,
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    if (widgetHost.appWidgetId != LauncherWidgetHost.NO_WIDGET) {
-                        IconButton(onClick = { confirmWidgetRemoval = true }) {
+                    Text(
+                        text = if (pagerState.currentPage == 0) "ホーム  ● ○" else "ウィジェット  ○ ●",
+                        color = LocalHomeLabelColor.current.copy(alpha = 0.7f),
+                    )
+                    Row {
+                        if (pagerState.currentPage == 1) {
+                            IconButton(onClick = onPickWidget) {
+                                Icon(
+                                    imageVector = Icons.Filled.Widgets,
+                                    contentDescription = "ウィジェットを追加",
+                                    tint = LocalHomeLabelColor.current.copy(alpha = 0.75f),
+                                )
+                            }
+                        }
+                        IconButton(onClick = onOpenSettings) {
                             Icon(
-                                imageVector = Icons.Filled.DeleteOutline,
-                                contentDescription = "ウィジェットを削除",
+                                imageVector = Icons.Filled.Settings,
+                                contentDescription = "設定",
                                 tint = LocalHomeLabelColor.current.copy(alpha = 0.75f),
                             )
                         }
                     }
-                    IconButton(onClick = onPickWidget) {
-                        Icon(
-                            imageVector = Icons.Filled.Widgets,
-                            contentDescription = "ウィジェットを選択",
-                            tint = LocalHomeLabelColor.current.copy(alpha = 0.75f),
-                        )
-                    }
-                    IconButton(onClick = onOpenSettings) {
-                        Icon(
-                            imageVector = Icons.Filled.Settings,
-                            contentDescription = "設定",
-                            tint = LocalHomeLabelColor.current.copy(alpha = 0.75f),
-                        )
-                    }
                 }
 
-                Box(
-                    modifier = Modifier
-                        .weight(1f)
-                        .fillMaxWidth()
-                        .pointerInput(Unit) {
-                            detectTapGestures(
-                                onTap = { editMode = false },
-                                onLongPress = { onOpenSettings() },
-                            )
-                        },
-                ) {
-                    when {
-                        viewModel.allowedApps.isNotEmpty() -> {
-                            HomeGrid(
-                                items = viewModel.homeItems,
-                                modifier = Modifier.padding(
-                                    top = if (
-                                    widgetHost.appWidgetId != LauncherWidgetHost.NO_WIDGET
-                                    ) 116.dp else 0.dp,
-                                ),
-                                editMode = editMode,
-                                onDragStarted = { editMode = true },
-                                onReorder = viewModel::moveHomeItem,
-                                onRemove = viewModel::removeFromHome,
-                                onOpenFolder = { openFolder = it.name to false },
-                                onLaunch = viewModel::requestLaunch,
-                            )
-                        }
-                        !viewModel.isLoading -> {
-                            EmptyHome(
-                                modifier = Modifier.align(Alignment.Center),
-                                onOpenSettings = onOpenSettings,
-                            )
-                        }
-                    }
-
-                    val hostedWidgetId = widgetHost.appWidgetId
-                    if (hostedWidgetId != LauncherWidgetHost.NO_WIDGET) {
-                        key(hostedWidgetId) {
-                            AndroidView(
-                                factory = { context ->
-                                    widgetHost.createView(context)
-                                        ?: android.widget.TextView(context).apply {
-                                            text = "ウィジェットを読み込めません"
-                                        }
+                HorizontalPager(
+                    state = pagerState,
+                    modifier = Modifier.weight(1f).fillMaxWidth(),
+                ) { page ->
+                    if (page == 0) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .pointerInput(Unit) {
+                                    detectTapGestures(
+                                        onTap = { editMode = false },
+                                        onLongPress = { onOpenSettings() },
+                                    )
                                 },
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(108.dp)
-                                    .padding(horizontal = 8.dp),
-                                update = { view ->
-                                    if (view is android.appwidget.AppWidgetHostView) {
-                                        val info = widgetHost.manager.getAppWidgetInfo(hostedWidgetId)
-                                        if (info != null) view.setAppWidget(hostedWidgetId, info)
-                                    }
-                                },
-                            )
+                        ) {
+                            when {
+                                viewModel.allowedApps.isNotEmpty() -> HomeGrid(
+                                    items = viewModel.homeItems,
+                                    editMode = editMode,
+                                    onDragStarted = { editMode = true },
+                                    onReorder = viewModel::moveHomeItem,
+                                    onRemove = viewModel::removeFromHome,
+                                    onOpenFolder = { openFolder = it.name to false },
+                                    onLaunch = viewModel::requestLaunch,
+                                )
+                                !viewModel.isLoading -> EmptyHome(
+                                    modifier = Modifier.align(Alignment.Center),
+                                    onOpenSettings = onOpenSettings,
+                                )
+                            }
                         }
+                    } else {
+                        WidgetPage(
+                            widgetHost = widgetHost,
+                            onPickWidget = onPickWidget,
+                            onRemove = { widgetRemovalTarget = it },
+                        )
                     }
                 }
 
@@ -216,21 +203,86 @@ fun HomeScreen(
             )
         }
 
-        if (confirmWidgetRemoval) {
+        widgetRemovalTarget?.let { widgetId ->
             AlertDialog(
-                onDismissRequest = { confirmWidgetRemoval = false },
+                onDismissRequest = { widgetRemovalTarget = null },
                 title = { Text("ウィジェットを削除しますか？") },
                 text = { Text("ホーム画面から取り外します。コンディションアプリの記録は削除されません。") },
                 confirmButton = {
                     TextButton(onClick = {
-                        widgetHost.removeCurrent()
-                        confirmWidgetRemoval = false
+                        widgetHost.remove(widgetId)
+                        widgetRemovalTarget = null
                     }) { Text("削除") }
                 },
                 dismissButton = {
-                    TextButton(onClick = { confirmWidgetRemoval = false }) { Text("キャンセル") }
+                    TextButton(onClick = { widgetRemovalTarget = null }) { Text("キャンセル") }
                 },
             )
+        }
+    }
+}
+
+@Composable
+private fun WidgetPage(
+    widgetHost: LauncherWidgetHost,
+    onPickWidget: () -> Unit,
+    onRemove: (Int) -> Unit,
+) {
+    if (widgetHost.appWidgetIds.isEmpty()) {
+        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            TextButton(onClick = onPickWidget) { Text("ウィジェットを追加") }
+        }
+        return
+    }
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(start = 8.dp, end = 8.dp, top = 8.dp, bottom = 32.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        itemsIndexed(widgetHost.appWidgetIds, key = { _, id -> id }) { index, widgetId ->
+            key(widgetId) {
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.End,
+                    ) {
+                        IconButton(
+                            enabled = index > 0,
+                            onClick = { widgetHost.move(widgetId, -1) },
+                        ) {
+                            Icon(Icons.Filled.KeyboardArrowUp, contentDescription = "上へ移動")
+                        }
+                        IconButton(
+                            enabled = index < widgetHost.appWidgetIds.lastIndex,
+                            onClick = { widgetHost.move(widgetId, 1) },
+                        ) {
+                            Icon(Icons.Filled.KeyboardArrowDown, contentDescription = "下へ移動")
+                        }
+                        IconButton(onClick = { onRemove(widgetId) }) {
+                            Icon(Icons.Filled.DeleteOutline, contentDescription = "削除")
+                        }
+                    }
+                    AndroidView(
+                        factory = { context ->
+                            widgetHost.createView(context, widgetId)
+                                ?: android.widget.TextView(context).apply { text = "ウィジェットを読み込めません" }
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(
+                                (widgetHost.manager.getAppWidgetInfo(widgetId)?.minHeight ?: 120)
+                                    .coerceIn(96, 320).dp,
+                            ),
+                        update = { view ->
+                            if (view is android.appwidget.AppWidgetHostView) {
+                                widgetHost.manager.getAppWidgetInfo(widgetId)?.let {
+                                    view.setAppWidget(widgetId, it)
+                                }
+                            }
+                        },
+                    )
+                }
+            }
         }
     }
 }

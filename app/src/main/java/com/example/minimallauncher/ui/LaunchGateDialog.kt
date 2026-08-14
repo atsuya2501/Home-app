@@ -72,10 +72,15 @@ fun ReasonGateDialog(
                         style = MaterialTheme.typography.bodyMedium,
                     )
                 }
-                if (app.packageName == AppRepository.YOUTUBE_PACKAGE && requireReason) {
+                val searchTarget = when (app.packageName) {
+                    AppRepository.YOUTUBE_PACKAGE -> "YouTube"
+                    AppRepository.INSTAGRAM_PACKAGE -> "Instagram"
+                    else -> null
+                }
+                if (searchTarget != null && requireReason) {
                     Spacer(Modifier.height(8.dp))
                     Text(
-                        text = "入力した理由でYouTube内を検索し、検索結果から開きます（トップのおすすめ・ショートを飛ばします）",
+                        text = "入力した理由で${searchTarget}内を検索し、検索結果から開きます（トップのおすすめを飛ばします）",
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         style = MaterialTheme.typography.bodySmall,
                     )

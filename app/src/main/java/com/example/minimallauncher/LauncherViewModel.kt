@@ -403,7 +403,7 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
 
     /**
      * ゲートダイアログを確定して実際に起動する。
-     * 理由が必要なアプリ（friction）は理由をログに残し、YouTube は検索経由で開く。
+     * 理由が必要なアプリ（friction）は理由をログに残し、YouTubeとInstagramは検索経由で開く。
      * 待機のみ（friction ではない）のアプリは reason が空で渡ってくるので、
      * 空理由のゴミログを残さないよう、ログには記録せずそのまま起動する。
      */
@@ -437,10 +437,13 @@ class LauncherViewModel(application: Application) : AndroidViewModel(application
         reasonLog = updated
         preferences.setReasonLog(updated)
 
-        // YouTube はホームフィード（Shorts の誘惑）を経由させず、
-        // 入力した理由をそのまま検索して結果画面から開始する
-        val openedViaSearch = app.packageName == AppRepository.YOUTUBE_PACKAGE &&
-            repository.launchYouTubeSearch(trimmedReason)
+        // YouTube・Instagramはホームフィードを経由させず、
+        // 入力した理由をそのまま検索して結果画面から開始する。
+        val openedViaSearch = when (app.packageName) {
+            AppRepository.YOUTUBE_PACKAGE -> repository.launchYouTubeSearch(trimmedReason)
+            AppRepository.INSTAGRAM_PACKAGE -> repository.launchInstagramSearch(trimmedReason)
+            else -> false
+        }
         if (!openedViaSearch) {
             launchApp(app.packageName)
         }

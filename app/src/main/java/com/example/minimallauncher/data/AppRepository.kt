@@ -79,10 +79,31 @@ class AppRepository(private val context: Context) {
         }
     }
 
+    /**
+     * Instagramをホームフィードではなく、入力語の検索結果から開く。
+     * Reelsやおすすめへの無目的な流入を避けるための入口。
+     */
+    fun launchInstagramSearch(query: String): Boolean {
+        val uri = "https://www.instagram.com/explore/search/keyword/?q=${Uri.encode(query)}".toUri()
+        val intent = Intent(Intent.ACTION_VIEW, uri).apply {
+            setPackage(INSTAGRAM_PACKAGE)
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+        return try {
+            context.startActivity(intent)
+            true
+        } catch (e: ActivityNotFoundException) {
+            false
+        }
+    }
+
     companion object {
         private const val ICON_SIZE_PX = 144
 
         /** YouTube 公式アプリのパッケージ名。 */
         const val YOUTUBE_PACKAGE = "com.google.android.youtube"
+
+        /** Instagram公式アプリのパッケージ名。 */
+        const val INSTAGRAM_PACKAGE = "com.instagram.android"
     }
 }
